@@ -10,6 +10,51 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Diagnostic-only verification callback.
+ *
+ * IMPORTANT: this callback never clears or changes verification flags. It only
+ * records what Mbed TLS actually parsed from the peer certificate so hostname
+ * failures can be diagnosed without weakening certificate verification.
+ */
+static int IMBModernTLSVerifyTrace(void *data,
+                                   mbedtls_x509_crt *crt,
+                                   int depth,
+                                   uint32_t *flags)
+{
+    NSMutableString *report = (NSMutableString *)data;
+    if (!report || !crt || !flags) return 0;
+
+    [report appendFormat:@"\nVerify callback: depth=%d flags=0x%08lX\n",
+                         depth,
+                         (unsigned long)(*flags)];
+
+    if (depth == 0) {
+        char certificateInfo[4096];
+        memset(certificateInfo, 0, sizeof(certificateInfo));
+        mbedtls_x509_crt_info(certificateInfo,
+                              sizeof(certificateInfo) - 1,
+                              "  ",
+                              crt);
+        [report appendString:@"Peer certificate as parsed by Mbed TLS:\n"];
+        [report appendFormat:@"%s\n", certificateInfo];
+    }
+
+    if (*flags != 0) {
+        char verifyInfo[1024];
+        memset(verifyInfo, 0, sizeof(verifyInfo));
+        mbedtls_x509_crt_verify_info(verifyInfo,
+                                     sizeof(verifyInfo) - 1,
+                                     "  ",
+                                     *flags);
+        [report appendString:@"Verification flags at this depth:\n"];
+        [report appendFormat:@"%s\n", verifyInfo];
+    }
+
+    /* Preserve Mbed TLS' decision exactly as-is. */
+    return 0;
+}
+
 @implementation IMBModernTLSProbe
 
 + (NSString *)errorTextForCode:(int)code {
@@ -142,6 +187,7 @@
     mbedtls_ssl_conf_authmode(&config, MBEDTLS_SSL_VERIFY_REQUIRED);
     mbedtls_ssl_conf_ca_chain(&config, &caCert, NULL);
     mbedtls_ssl_conf_rng(&config, mbedtls_ctr_drbg_random, &ctrDRBG);
+    mbedtls_ssl_conf_verify(&config, IMBModernTLSVerifyTrace, report);
 
     ret = mbedtls_ssl_setup(&ssl, &config);
     if (ret != 0) {
