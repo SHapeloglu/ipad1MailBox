@@ -12,6 +12,12 @@ Installed test build:
 iPad1MailBox 0.3-alpha1
 ```
 
+Next test build:
+
+```text
+iPad1MailBox 0.3-alpha2
+```
+
 Target server:
 
 ```text
@@ -42,13 +48,13 @@ Compatibility fixes already made:
 - `MBEDTLS_PLATFORM_C` is enabled as its prerequisite.
 - `Classes/IMBMBEDTLSPlatform.c` implements `mbedtls_ms_time()` using `mach_absolute_time()`.
 
-The resulting package builds successfully and is approximately 102 KB.
+The resulting alpha1 package builds successfully and is approximately 102 KB.
 
-## Current physical-device result
+## Latest physical-device result
 
-The TLS diagnostics screen now shows the Modern TLS section.
+The TLS diagnostics screen shows the Modern TLS section.
 
-Latest relevant result:
+Latest relevant result from `0.3-alpha1`:
 
 ```text
 --- Modern TLS transport ---
@@ -61,19 +67,36 @@ X509 - Signature algorithm (oid) is unsupported
 OID - OID is not found
 ```
 
-This occurs while loading/parsing the bundled CA root, before the Mbed TLS TCP/TLS handshake proceeds.
+This occurred while loading/parsing the bundled ISRG Root X1 trust anchor, before TCP/TLS handshake.
 
-## Likely next fix
+## Fix prepared for 0.3-alpha2
 
-The minimal Mbed TLS profile currently contains ECDSA/ECDH support but not the RSA certificate-signature support needed for the RSA-signed ISRG Root X1 trust anchor.
+The next build changes the bundled trust anchor from ISRG Root X1 (RSA 4096) to **ISRG Root X2 (ECDSA P-384)**, which matches the current ECDSA Let's Encrypt hierarchy used by the target server.
 
-Next change should add the minimum RSA/X.509 verification capability while keeping the negotiated TLS suites restricted to ECDHE-ECDSA + AES-GCM.
+The Mbed TLS config also enables:
 
-Do not solve this by disabling verification.
+```text
+MBEDTLS_RSA_C
+MBEDTLS_PKCS1_V15
+```
+
+This is for RSA PKCS#1 v1.5 **certificate-signature/OID compatibility** if a cross-signed CA certificate is present in the server chain. RSA TLS key exchange is not enabled. The only configured TLS ciphers remain ECDHE-ECDSA + AES-GCM.
+
+The bootstrap script now downloads:
+
+```text
+https://letsencrypt.org/certs/isrg-root-x2.pem
+```
+
+and installs it as:
+
+```text
+Resources/isrgrootx2.pem
+```
 
 ## Build commands
 
-After pulling changes that modify Mbed TLS config:
+After pulling the alpha2 changes:
 
 ```bash
 cd ~/projects/ipad1MailBox
@@ -84,10 +107,10 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-Package path:
+Expected package path:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha1_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha2_iphoneos-arm.deb
 ```
 
 Copy to iPad:
@@ -95,14 +118,14 @@ Copy to iPad:
 ```bash
 scp -o HostKeyAlgorithms=+ssh-rsa \
 -o PubkeyAcceptedAlgorithms=+ssh-rsa \
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha1_iphoneos-arm.deb \
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha2_iphoneos-arm.deb \
 root@192.168.1.100:/var/mobile/
 ```
 
 Install on iPad:
 
 ```bash
-dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.3-alpha1_iphoneos-arm.deb
+dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.3-alpha2_iphoneos-arm.deb
 su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
 killall SpringBoard
 ```
@@ -125,4 +148,4 @@ dpkg -s com.shapeloglu.ipad1mailbox | grep Version
 
 ## Resume here
 
-Open `TASK.md` first. Fix the unsupported certificate signature/OID condition, rebuild, install, then capture the bottom of the TLS Diagnostics window again.
+Open `TASK.md` first. Pull/build `0.3-alpha2`, run the physical-device TLS probe, and capture the Modern TLS section. The next diagnostic gate is whether ISRG Root X2 loads and the handshake proceeds beyond CA parsing.
