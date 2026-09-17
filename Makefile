@@ -19,7 +19,9 @@ iPad1MailBox_FILES = \
 	Classes/IMBIMAPClient.m \
 	Classes/IMBMBEDTLSTransport.m \
 	Classes/IMBRFC2047Decoder.m \
+	Classes/IMBMIMETextExtractor.m \
 	Classes/IMBMessageListViewController.m \
+	Classes/IMBMessageReaderViewController.m \
 	Classes/IMBTLSDiagnostics.m \
 	Classes/IMBModernTLSProbe.m \
 	Classes/IMBMBEDTLSPlatform.c \
