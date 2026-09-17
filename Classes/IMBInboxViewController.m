@@ -3,6 +3,7 @@
 #import "IMBAccount.h"
 #import "IMBAccountSetupViewController.h"
 #import "IMBComposeViewController.h"
+#import "IMBMessageListViewController.h"
 
 @implementation IMBInboxViewController
 
@@ -79,7 +80,10 @@
     } else {
         IMBAccount *account = [accounts objectAtIndex:indexPath.row];
         cell.textLabel.text = account.displayName ? account.displayName : account.emailAddress;
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"IMAP %@:%lu", account.imapHost, (unsigned long)account.imapPort];
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"IMAP %@:%lu%@",
+                                     account.imapHost,
+                                     (unsigned long)account.imapPort,
+                                     account.imapUseSSL ? @" SSL/TLS" : @""];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleBlue;
     }
@@ -91,22 +95,22 @@
     if ([accounts count] == 0) return;
 
     IMBAccount *account = [accounts objectAtIndex:indexPath.row];
-    UIViewController *detail = [[[UIViewController alloc] init] autorelease];
-    detail.title = @"Inbox";
-    detail.view.backgroundColor = [UIColor whiteColor];
-
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(40.0f, 80.0f, 520.0f, 100.0f)] autorelease];
-    label.backgroundColor = [UIColor clearColor];
-    label.numberOfLines = 0;
-    label.textAlignment = UITextAlignmentCenter;
-    label.text = [NSString stringWithFormat:@"%@\n\nIMAP message loading will be enabled in the next transport milestone.", account.emailAddress];
-    [detail.view addSubview:label];
+    IMBMessageListViewController *messages = [[[IMBMessageListViewController alloc] initWithAccount:account] autorelease];
 
     UISplitViewController *split = (UISplitViewController *)self.splitViewController;
     if (split && [split.viewControllers count] >= 2) {
-        UINavigationController *detailNavigation = [[[UINavigationController alloc] initWithRootViewController:detail] autorelease];
-        split.viewControllers = [NSArray arrayWithObjects:[split.viewControllers objectAtIndex:0], detailNavigation, nil];
+        UIViewController *detailContainer = [split.viewControllers objectAtIndex:1];
+        if ([detailContainer isKindOfClass:[UINavigationController class]]) {
+            UINavigationController *detailNavigation = (UINavigationController *)detailContainer;
+            UIBarButtonItem *mailboxesButton = detailNavigation.topViewController.navigationItem.leftBarButtonItem;
+            if (mailboxesButton) messages.navigationItem.leftBarButtonItem = mailboxesButton;
+            [detailNavigation setViewControllers:[NSArray arrayWithObject:messages] animated:NO];
+        } else {
+            UINavigationController *detailNavigation = [[[UINavigationController alloc] initWithRootViewController:messages] autorelease];
+            split.viewControllers = [NSArray arrayWithObjects:[split.viewControllers objectAtIndex:0], detailNavigation, nil];
+        }
     }
+
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
