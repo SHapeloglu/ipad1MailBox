@@ -6,19 +6,16 @@ This file contains work that is not part of the current active task. Keep `TASK.
 
 ## Transport and protocol
 
-- Replace the SecureTransport IMAP path with the validated Mbed TLS transport.
-- Add a small transport abstraction so IMAP and SMTP do not depend directly on TLS implementation details.
-- Add connection timeout/cancel behavior to the Mbed TLS transport.
-- Add robust partial read/write handling for TLS records and IMAP commands.
 - Add reconnect behavior after network changes.
 - Add SMTP transport after IMAP is stable.
 - Distinguish SMTP implicit TLS (typically 465) from STARTTLS submission (typically 587).
+- Replace broad Mbed TLS source wildcarding with an explicit minimal source list after functional milestones stabilize.
 
 ## IMAP
 
 - Folder discovery/listing.
 - Sent/Drafts/Trash mapping.
-- Paged message header loading.
+- Paged message header loading beyond the initial 25-message page.
 - Full message body loading on demand.
 - Read/unread flags.
 - Star/flag support.
@@ -28,12 +25,12 @@ This file contains work that is not part of the current active task. Keep `TASK.
 
 ## Message parsing
 
-- Decode RFC 2047 encoded subjects and sender names.
 - Parse multipart MIME messages.
 - Prefer plain text when appropriate.
 - Add conservative HTML rendering for iPad 1.
-- Handle common charset conversions.
+- Expand charset coverage as real mail samples require it.
 - Parse attachment metadata without loading attachment data eagerly.
+- Reuse `IMBRFC2047Decoder` anywhere decoded display headers are needed outside the Inbox list.
 
 ## Compose and SMTP
 
@@ -71,12 +68,10 @@ This file contains work that is not part of the current active task. Keep `TASK.
 - Add diagnostic output for negotiated curve and peer certificate chain where useful.
 - Keep certificate and hostname verification mandatory.
 - Review Mbed TLS configuration for unused modules and reduce binary size after the transport works.
-- Replace `$(wildcard Vendor/mbedtls/library/*.c)` with a minimal explicit source list after required features are known.
 - Review Mbed TLS security updates before each release.
 
 ## UI and diagnostics
 
-- Auto-scroll TLS Diagnostics to the Modern TLS result after the probe completes.
 - Separate user-facing connection errors from developer diagnostics.
 - Add a compact account status indicator.
 - Add loading/cancel state that remains responsive on iPad 1.
