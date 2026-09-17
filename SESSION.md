@@ -4,72 +4,100 @@ _Last updated: 2026-09-17_
 
 ## Where we are
 
-The physical iPad 1 has successfully loaded the real Inbox over the reusable Mbed TLS transport. The transport migration is no longer the active blocker.
+The physical iPad 1 has now passed both the modern transport and header-decoding milestones.
 
 Latest proven device build:
-
-```text
-iPad1MailBox 0.4-alpha1
-```
-
-Next test build:
 
 ```text
 iPad1MailBox 0.4-alpha2
 ```
 
-## Proven on the physical iPad
-
-Normal Inbox now completes:
+Next test build:
 
 ```text
-verified Mbed TLS 1.2 connection
+iPad1MailBox 0.5-alpha1
+```
+
+## Proven on the physical iPad
+
+Normal Inbox works through verified Mbed TLS 3.6.7:
+
+```text
+TLS 1.2
 -> LOGIN
 -> SELECT INBOX
 -> FETCH latest 25 headers
--> message list rendered
+-> RFC 2047 decoding
+-> readable Turkish message list
 ```
 
-The old normal-operation SecureTransport `OSStatus -9844` error is gone.
+The old SecureTransport `OSStatus -9844` normal-operation failure is gone. UTF-8 and ISO-8859-9 encoded Subject/From fields now render correctly.
 
-The message list screenshot confirmed real subjects, senders and dates are being fetched. Refresh/cancel infrastructure remains based on the generation-token + reusable transport design.
+## 0.5-alpha1 changes prepared
 
-## Current visible problem
+### Message reader
 
-Several real Subject and From fields are RFC 2047 encoded words and are shown raw, including UTF-8 and ISO-8859-9 examples.
-
-Examples:
+New controller:
 
 ```text
-=?UTF-8?Q?...=C4=B1...?=
-=?iso-8859-9?Q?...?=
+Classes/IMBMessageReaderViewController.h
+Classes/IMBMessageReaderViewController.m
 ```
 
-## 0.4-alpha2 changes prepared
+Tapping an Inbox row now pushes a real message screen showing Subject, From, Date and an on-demand body.
 
-New decoder:
+### Bounded body fetch
+
+`IMBIMAPClient` now supports:
 
 ```text
-Classes/IMBRFC2047Decoder.h
-Classes/IMBRFC2047Decoder.m
+fetchMessageBodyForAccount:password:uid:
 ```
 
-Capabilities:
+Flow:
 
-- Q encoded-word decoding (`_` -> space, `=HH` bytes)
-- Base64 encoded-word decoding without iOS 7+ NSData APIs
-- adjacent encoded-word handling
-- UTF-8 / ASCII / ISO-8859-1 mappings
-- general IANA charset conversion through CoreFoundation, covering Turkish legacy charsets such as ISO-8859-9 when available
-- safe preservation of unsupported or malformed content
+```text
+connect
+-> LOGIN
+-> SELECT INBOX
+-> UID FETCH <uid> BODY.PEEK[]<0.262144>
+-> extract IMAP literal
+-> MIME plain-text extraction
+-> LOGOUT
+```
 
-`IMBMessageListViewController` now normalizes Subject and From once in `didLoadMessages:` before storing the UI message array.
+The selected message is addressed by UID rather than sequence number.
 
-`Makefile` now compiles `IMBRFC2047Decoder.m` and links CoreFoundation explicitly.
+### MIME text extraction
+
+New files:
+
+```text
+Classes/IMBMIMETextExtractor.h
+Classes/IMBMIMETextExtractor.m
+```
+
+Current scope:
+
+- first non-attachment `text/plain` entity
+- multipart recursion with bounded depth
+- quoted-printable decode
+- Base64 decode
+- charset conversion through CoreFoundation
+- attachment parts skipped
+- HTML is intentionally not rendered yet
+
+Memory/safety bounds:
+
+```text
+message prefix: 256 KB maximum
+IMAP accumulated response: 512 KB maximum
+command timeout: 20 seconds
+```
 
 ## Build commands
 
-No Mbed TLS config changed, so `make bootstrap` is not required if `0.4-alpha1` already built successfully.
+No Mbed TLS config changed, so bootstrap is not required if the existing local vendor tree is current.
 
 ```bash
 cd ~/projects/ipad1MailBox
@@ -82,7 +110,7 @@ make package FINALPACKAGE=1
 Expected package:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb
 ```
 
 Copy:
@@ -90,30 +118,22 @@ Copy:
 ```bash
 scp -o HostKeyAlgorithms=+ssh-rsa \
 -o PubkeyAcceptedAlgorithms=+ssh-rsa \
-packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb \
+packages/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb \
 root@192.168.1.100:/var/mobile/
 ```
 
 Install:
 
 ```bash
-dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
+dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb
 su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
 killall SpringBoard
 ```
 
 ## What to test next
 
-Open the same Inbox and compare messages that previously displayed raw encoded words. Confirm UTF-8 and ISO-8859-9 Turkish subjects/sender names are readable and one refresh still behaves correctly.
-
-## Important code locations
-
-- `Classes/IMBMBEDTLSTransport.m` - proven reusable TLS transport
-- `Classes/IMBIMAPClient.m` - working background IMAP header fetch
-- `Classes/IMBRFC2047Decoder.m` - current header-decoding task
-- `Classes/IMBMessageListViewController.m` - applies decoded presentation values
-- `TASK.md` - current physical-device test gate
+Open several messages from Inbox. Confirm at least one plain-text or multipart mail displays readable content. Test navigating back and opening another message. HTML-only messages may intentionally show the plain-text-not-found fallback in this milestone.
 
 ## Resume here
 
-Build/install `0.4-alpha2`, inspect the same messages shown in the successful `0.4-alpha1` screenshot, and verify Turkish encoded headers are now readable. If that passes, start on-demand message-body fetching next.
+Read `TASK.md`. Build and physically test `0.5-alpha1`. Fix any compile/runtime/MIME issues before adding HTML rendering, attachments or SMTP.
