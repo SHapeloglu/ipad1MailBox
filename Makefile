@@ -20,6 +20,7 @@ iPad1MailBox_FILES = \
 	Classes/IMBMessageListViewController.m \
 	Classes/IMBTLSDiagnostics.m \
 	Classes/IMBModernTLSProbe.m \
+	Classes/IMBMBEDTLSPlatform.c \
 	$(MBEDTLS_SOURCES)
 
 iPad1MailBox_FRAMEWORKS = UIKit Foundation Security CFNetwork
