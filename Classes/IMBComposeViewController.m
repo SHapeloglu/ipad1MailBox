@@ -36,8 +36,6 @@
 
     _bodyView = [[UITextView alloc] initWithFrame:CGRectMake(20.0f, 112.0f, 490.0f, 390.0f)];
     _bodyView.font = [UIFont systemFontOfSize:16.0f];
-    _bodyView.layer.borderWidth = 1.0f;
-    _bodyView.layer.borderColor = [[UIColor lightGrayColor] CGColor];
     [self.view addSubview:_bodyView];
 
     [_toField becomeFirstResponder];
