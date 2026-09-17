@@ -5,10 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT_DIR/Vendor/mbedtls"
 CONFIG_SRC="$ROOT_DIR/Config/IMBMBEDTLSConfig.h"
 CONFIG_DST="$VENDOR_DIR/include/mbedtls/mbedtls_config.h"
-CA_DST="$ROOT_DIR/Resources/isrgrootx1.pem"
+CA_DST="$ROOT_DIR/Resources/isrgrootx2.pem"
 MBEDTLS_TAG="mbedtls-3.6.7"
 MBEDTLS_URL="https://github.com/Mbed-TLS/mbedtls.git"
-CA_URL="https://letsencrypt.org/certs/isrgrootx1.pem"
+CA_URL="https://letsencrypt.org/certs/isrg-root-x2.pem"
 
 mkdir -p "$ROOT_DIR/Vendor"
 
@@ -44,5 +44,6 @@ if ! grep -q "BEGIN CERTIFICATE" "$CA_DST.tmp"; then
 fi
 
 mv "$CA_DST.tmp" "$CA_DST"
-echo "[bootstrap] Installed ISRG Root X1 trust anchor."
+rm -f "$ROOT_DIR/Resources/isrgrootx1.pem"
+echo "[bootstrap] Installed ISRG Root X2 trust anchor."
 echo "[bootstrap] Ready. Run: make clean && make package FINALPACKAGE=1"
