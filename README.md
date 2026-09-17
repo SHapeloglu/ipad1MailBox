@@ -2,16 +2,19 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## v0.1-alpha1 goals
+## Current milestone: v0.3-alpha1
 
-- Native Objective-C / UIKit UI
-- iPad-first split layout
-- Add and store mail account settings
-- Credentials stored in iOS Keychain, never in plist/NSUserDefaults
-- Inbox shell ready for IMAP integration
-- Compose shell ready for SMTP integration
+- Native Objective-C / UIKit split-view UI
+- Account metadata storage + Keychain-backed password storage
+- Minimal IMAP header loader (`LOGIN` -> `SELECT INBOX` -> latest header fetch)
+- SecureTransport diagnostics for the iPad's real cipher capabilities
+- Mbed TLS 3.6.7 modern TLS 1.2 handshake probe
+- TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
+- Server hostname/SNI validation
+- Certificate-chain validation against bundled ISRG Root X1
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
-- Low-memory design: message headers are paged; message bodies and attachments will be loaded on demand
+
+The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha1` first proves the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
 
 ## Build target
 
@@ -22,6 +25,16 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - SDK: iPhoneOS 6.1
 - Memory management: non-ARC
 
+## One-time TLS bootstrap
+
+The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstrap them once after cloning/pulling:
+
+```bash
+make bootstrap
+```
+
+This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific low-memory TLS configuration, and downloads ISRG Root X1 from Let's Encrypt.
+
 ## Build
 
 ```bash
@@ -29,9 +42,29 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-## Current status
+Expected package for this milestone:
 
-`v0.1-alpha1` is the bootstrap milestone. It provides the native application structure, account setup UI, Keychain-backed account storage, inbox placeholder, and compose placeholder. Real IMAP/SMTP transport is intentionally isolated for the next milestone so UI/device stability can be verified first.
+```text
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha1_iphoneos-arm.deb
+```
+
+## TLS diagnostics
+
+Open an account and tap `TLS` in the Inbox toolbar. The diagnostics view first prints the iOS 5 SecureTransport cipher list and then runs the Mbed TLS probe on a background thread.
+
+The modern probe reports:
+
+- RNG initialization
+- CA trust-anchor loading
+- TCP connection
+- SNI / hostname setup
+- TLS handshake result
+- negotiated TLS version and cipher
+- certificate verification result
+- peer subject / issuer
+- first Dovecot IMAP greeting line
+
+No certificate-verification bypass is used.
 
 ## Planned suite integration
 
@@ -47,4 +80,4 @@ Default future attachment storage root:
 
 ## Security
 
-Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately.
+Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path uses required X.509 verification and hostname/SNI checking.
