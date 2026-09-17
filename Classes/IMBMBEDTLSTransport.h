@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#include <stdint.h>
 
 extern NSString * const IMBMBEDTLSTransportErrorDomain;
 
