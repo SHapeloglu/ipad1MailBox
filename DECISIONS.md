@@ -51,9 +51,23 @@ Mbed TLS 3.6.7 is compiled into the application and configured for TLS 1.2, ECDH
 
 ## ADR-006 - Validate Mbed TLS independently before replacing IMAP transport
 
-**Status:** Accepted
+**Status:** Completed successfully
 
-`IMBModernTLSProbe` is a deliberate integration gate. The replacement transport is not connected to `IMBIMAPClient` until the physical iPad proves RNG, trust-anchor parsing, TCP, TLS handshake, hostname verification, certificate verification, approved cipher negotiation, and the IMAP greeting.
+`IMBModernTLSProbe` was used as a deliberate integration gate before replacing normal IMAP transport.
+
+The physical iPad has now proven:
+
+- RNG initialization
+- trust-anchor parsing
+- TCP connection
+- TLS 1.2 handshake
+- ClientHello SNI
+- hostname verification
+- certificate-chain verification
+- ECDHE-ECDSA AES-256-GCM negotiation
+- Dovecot IMAP greeting
+
+The probe remains useful as diagnostics, but it no longer blocks transport integration.
 
 ## ADR-007 - Supply monotonic time with `mach_absolute_time()`
 
@@ -89,23 +103,34 @@ ISRG Root X1 uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised to 512
 
 This does **not** enable RSA TLS key exchange. The configured TLS cipher suites remain ECDHE-ECDSA + AES-GCM only.
 
-**Reason:** Validate the server's normal public chain first, then optimize memory or trust-anchor choices only after the end-to-end transport is proven on the physical iPad.
-
 ## ADR-011 - Enable ClientHello SNI explicitly
 
-**Status:** Accepted
+**Status:** Accepted and verified
 
 The `0.3-alpha3` device trace proved that calling `mbedtls_ssl_set_hostname()` alone was not enough in the project's minimal build. Hostname verification was active, but the ClientHello did not carry the `server_name` extension because `MBEDTLS_SSL_SERVER_NAME_INDICATION` was not enabled.
 
-The virtual-hosted IMAP server therefore returned its default certificate:
+The virtual-hosted IMAP server therefore returned its default `da2.mirahosting.com` certificate.
 
-```text
-CN=da2.mirahosting.com
-SAN=da2.mirahosting.com
-```
+`0.3-alpha4` enabled `MBEDTLS_SSL_SERVER_NAME_INDICATION` while retaining `mbedtls_ssl_set_hostname()`.
 
-rather than the certificate selected for `mail.olap.com.tr`.
+On the physical iPad this resulted in the expected `olap.com.tr` certificate, a SAN containing `mail.olap.com.tr`, zero verification flags, a successful TLS 1.2 handshake, `TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384`, and a valid Dovecot IMAP greeting.
 
-**Decision:** Enable `MBEDTLS_SSL_SERVER_NAME_INDICATION` and continue using `mbedtls_ssl_set_hostname()` so the same hostname is both transmitted via SNI and verified against the received certificate.
+## ADR-012 - Reuse one Mbed TLS transport for IMAP now and SMTP later
 
-**Security consequence:** This fixes virtual-host certificate selection without relaxing root, chain, or hostname verification.
+**Status:** Accepted
+
+The proven Mbed TLS setup should be extracted from the diagnostic probe into a reusable transport abstraction rather than copied directly into `IMBIMAPClient`.
+
+The transport should own:
+
+- TCP connect/close
+- TLS setup and handshake
+- trust-anchor configuration
+- SNI and hostname verification
+- bounded encrypted reads/writes
+- timeout/cancellation handling
+- TLS error reporting
+
+`IMBIMAPClient` should continue to own IMAP commands and parsing. SMTP can later reuse the same transport without duplicating TLS/security logic.
+
+**Reason:** Keep protocol logic separate from security/socket plumbing, reduce duplication, and make future SMTP integration safer on the constrained iPad 1 target.
