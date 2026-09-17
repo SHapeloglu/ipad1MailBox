@@ -35,73 +35,37 @@ Certificate and hostname verification remain mandatory.
 
 Do not use accept-all verification callbacks, `AllowsAnyRoot`, disabled peer verification, or obsolete TLS versions merely to make an old device connect.
 
-**Reason:** The application may need a newer TLS implementation, but it should not obtain compatibility by removing server authentication.
-
 ## ADR-004 - SecureTransport is diagnostic/legacy, not the long-term modern TLS path
 
 **Status:** Accepted
 
 Physical-device diagnostics showed that iOS 5.1.1 SecureTransport lacks the ECDHE-ECDSA AES-GCM cipher suites currently required by the test mail server. The server also rejects the older ECDHE-ECDSA CBC suites available on the iPad.
 
-**Decision:** Keep SecureTransport long enough to preserve the existing IMAP path and device diagnostics, but move modern server connectivity to a bundled TLS implementation.
+**Decision:** Keep SecureTransport long enough to preserve diagnostics, but move modern server connectivity to a bundled TLS implementation.
 
 ## ADR-005 - Use Mbed TLS 3.6.7 for the modern TLS transport
 
 **Status:** Accepted for current development
 
-Mbed TLS 3.6.7 is compiled into the application and configured for the required TLS 1.2 client use case.
-
-**Required capabilities:**
-
-- TLS 1.2
-- ECDHE-ECDSA
-- AES-GCM
-- SNI
-- X.509 parsing and verification
-- secure RNG
-- low-memory configuration suitable for iPad 1
-
-**Consequences:**
-
-- the app carries its own modern TLS code
-- Mbed TLS configuration becomes security-sensitive project code
-- dependency/security updates must be reviewed intentionally
-- binary size increases, but remains acceptable for the target
+Mbed TLS 3.6.7 is compiled into the application and configured for TLS 1.2, ECDHE-ECDSA, AES-GCM, SNI, X.509 verification, and a secure RNG.
 
 ## ADR-006 - Validate Mbed TLS independently before replacing IMAP transport
 
 **Status:** Accepted
 
-`IMBModernTLSProbe` is a deliberate integration gate.
-
-The replacement transport is not connected to `IMBIMAPClient` until the physical iPad proves:
-
-1. RNG initialization
-2. trust-anchor parsing
-3. TCP connection
-4. TLS handshake
-5. hostname verification
-6. certificate verification
-7. approved cipher negotiation
-8. IMAP server greeting
-
-**Reason:** Separating TLS validation from IMAP parsing makes failures easier to isolate on the old platform.
+`IMBModernTLSProbe` is a deliberate integration gate. The replacement transport is not connected to `IMBIMAPClient` until the physical iPad proves RNG, trust-anchor parsing, TCP, TLS handshake, hostname verification, certificate verification, approved cipher negotiation, and the IMAP greeting.
 
 ## ADR-007 - Supply monotonic time with `mach_absolute_time()`
 
 **Status:** Accepted
 
-Mbed TLS 3.6.7's default Unix-like millisecond timer path selected `clock_gettime()`, which is unavailable for the iOS 5 target.
-
-`MBEDTLS_PLATFORM_MS_TIME_ALT` plus `IMBMBEDTLSPlatform.c` provides `mbedtls_ms_time()` using `mach_absolute_time()`.
+Mbed TLS 3.6.7's default Unix-like millisecond timer path selected `clock_gettime()`, which is unavailable for the iOS 5 target. `MBEDTLS_PLATFORM_MS_TIME_ALT` plus `IMBMBEDTLSPlatform.c` provides `mbedtls_ms_time()` using `mach_absolute_time()`.
 
 ## ADR-008 - Keep mail application ownership narrow
 
 **Status:** Accepted
 
-iPad1MailBox owns mail accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off.
-
-It does not become a second file manager or media player.
+iPad1MailBox owns mail accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off. It does not become a second file manager or media player.
 
 Planned hand-off:
 
@@ -113,20 +77,16 @@ Planned hand-off:
 
 **Status:** Accepted
 
-During bring-up, the Makefile may compile a broader set of Mbed TLS library sources than the final application needs.
+During bring-up, the Makefile may compile a broader set of Mbed TLS library sources than the final application needs. After successful end-to-end TLS/IMAP validation, replace broad wildcard inclusion with an explicit minimal source list and measure binary/RAM impact.
 
-After successful end-to-end TLS/IMAP validation, replace broad wildcard inclusion with an explicit minimal source list and measure binary/RAM impact.
-
-**Reason:** Correctness and compatibility should be established before aggressive source pruning, while the final build should still respect the 256 MB target.
-
-## ADR-010 - Use ISRG Root X2 as the ECDSA trust anchor
+## ADR-010 - Keep ISRG Root X1 and support RSA certificate signatures
 
 **Status:** Accepted
 
-The first Mbed TLS probe bundled ISRG Root X1. That root is RSA 4096 and the intentionally small ECC-focused configuration could not parse its RSA signature OID.
+The first probe failed because the ECC-focused Mbed TLS profile could not parse the RSA signature OID in ISRG Root X1. Rather than change the trust model during bring-up, the project keeps ISRG Root X1 as the trust anchor and enables RSA PKCS#1 v1.5 support for X.509 certificate-signature verification.
 
-The target server currently uses the Let's Encrypt ECDSA hierarchy, which can terminate at ISRG Root X2 (ECDSA P-384). The application therefore bundles ISRG Root X2 as the trust anchor for this bring-up path.
+ISRG Root X1 uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised to 512 bytes.
 
-The Mbed TLS build still enables minimal RSA PKCS#1 v1.5 certificate-signature support so that RSA-signed cross-certificates in a server-provided chain can be recognised. This does **not** enable RSA TLS key exchange: the configured TLS ciphers remain ECDHE-ECDSA + AES-GCM only.
+This does **not** enable RSA TLS key exchange. The configured TLS cipher suites remain ECDHE-ECDSA + AES-GCM only.
 
-**Reason:** This keeps the trust store aligned with the actual ECDSA hierarchy and avoids carrying an unnecessary RSA 4096 trust-anchor key on the 256 MB target while retaining compatibility with cross-signed chain metadata.
+**Reason:** Validate the server's normal public chain first, then optimize memory or trust-anchor choices only after the end-to-end transport is proven on the physical iPad.
