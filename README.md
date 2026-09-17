@@ -2,7 +2,7 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## Current milestone: v0.3-alpha1
+## Current milestone: v0.3-alpha2
 
 - Native Objective-C / UIKit split-view UI
 - Account metadata storage + Keychain-backed password storage
@@ -12,11 +12,13 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
 - Server hostname/SNI validation path
 - Required X.509 certificate verification path using bundled trust anchors
+- ISRG Root X2 (ECDSA P-384) trust anchor for the current Let's Encrypt ECDSA hierarchy
+- Minimal RSA PKCS#1 v1.5 certificate-signature support for cross-signed CA compatibility; RSA TLS key exchange remains disabled
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
-The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha1` first proves the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha2` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
 
-The current physical-device probe reaches Mbed TLS successfully but is still resolving certificate-signature support required to parse the bundled trust anchor. See `TASK.md` for the exact active issue.
+See `TASK.md` for the exact active diagnostic gate.
 
 ## Project documents
 
@@ -45,7 +47,7 @@ The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstr
 make bootstrap
 ```
 
-This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific low-memory TLS configuration, and downloads ISRG Root X1 from Let's Encrypt.
+This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific low-memory TLS configuration, and downloads ISRG Root X2 from Let's Encrypt.
 
 ## Build
 
@@ -58,7 +60,7 @@ make package FINALPACKAGE=1
 Expected package for this milestone:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha1_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha2_iphoneos-arm.deb
 ```
 
 ## TLS diagnostics
