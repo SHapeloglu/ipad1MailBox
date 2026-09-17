@@ -31,7 +31,7 @@
     _emailField.placeholder = @"name@example.com";
     _emailField.keyboardType = UIKeyboardTypeEmailAddress;
     _usernameField.placeholder = @"Usually your email address";
-    _passwordField.placeholder = @"Password / app password";
+    _passwordField.placeholder = @"Password / app password (required)";
     _passwordField.secureTextEntry = YES;
     _imapField.placeholder = @"imap.example.com";
     _imapPortField.text = @"993";
@@ -117,9 +117,10 @@
     [self applyProviderDefaultsIfNeeded];
 
     if ([_emailField.text length] == 0 || [_usernameField.text length] == 0 ||
-        [_imapField.text length] == 0 || [_smtpField.text length] == 0) {
+        [_passwordField.text length] == 0 || [_imapField.text length] == 0 ||
+        [_smtpField.text length] == 0) {
         UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:@"Missing Information"
-                                                        message:@"Email, username, IMAP and SMTP server fields are required."
+                                                        message:@"Email, username, password, IMAP and SMTP server fields are required."
                                                        delegate:nil
                                               cancelButtonTitle:@"OK"
                                               otherButtonTitles:nil] autorelease];
@@ -138,7 +139,21 @@
     account.smtpPort = (NSUInteger)[_smtpPortField.text integerValue];
     account.smtpUseSSL = YES;
 
-    [[IMBAccountStore sharedStore] addOrUpdateAccount:account password:_passwordField.text];
+    NSInteger keychainStatus = 0;
+    BOOL saved = [[IMBAccountStore sharedStore] addOrUpdateAccount:account
+                                                          password:_passwordField.text
+                                                    keychainStatus:&keychainStatus];
+    if (!saved) {
+        NSString *message = [NSString stringWithFormat:@"The password could not be stored securely in Keychain. Error code: %ld", (long)keychainStatus];
+        UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:@"Keychain Error"
+                                                        message:message
+                                                       delegate:nil
+                                              cancelButtonTitle:@"OK"
+                                              otherButtonTitles:nil] autorelease];
+        [alert show];
+        return;
+    }
+
     [self dismissModalViewControllerAnimated:YES];
 }
 
