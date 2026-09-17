@@ -5,7 +5,9 @@
 @class IMBMBEDTLSTransport;
 
 @protocol IMBIMAPClientDelegate <NSObject>
+@optional
 - (void)imapClient:(IMBIMAPClient *)client didLoadMessages:(NSArray *)messages;
+- (void)imapClient:(IMBIMAPClient *)client didLoadMessageBody:(NSString *)body forUID:(NSString *)uid;
 - (void)imapClient:(IMBIMAPClient *)client didFailWithError:(NSError *)error;
 @end
 
@@ -18,6 +20,9 @@
 @property (nonatomic, assign) id<IMBIMAPClientDelegate> delegate;
 
 - (void)fetchLatestHeadersForAccount:(IMBAccount *)account password:(NSString *)password;
+- (void)fetchMessageBodyForAccount:(IMBAccount *)account
+                          password:(NSString *)password
+                               uid:(NSString *)uid;
 - (void)cancel;
 
 @end
