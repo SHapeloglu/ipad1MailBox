@@ -47,18 +47,18 @@
     [report appendFormat:@"Host: %@:%lu\n", host ? host : @"(null)", (unsigned long)port];
     [report appendString:@"Device TLS stack: Apple SecureTransport\n\n"];
 
-    SSLContextRef context = NULL;
-    OSStatus status = SSLNewContext(false, &context);
-    if (status != noErr || context == NULL) {
-        [report appendFormat:@"SSLNewContext failed: %ld\n", (long)status];
+    SSLContextRef context = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+    if (context == NULL) {
+        [report appendString:@"SSLCreateContext failed.\n"];
         return report;
     }
 
+    OSStatus status = noErr;
     size_t supportedCount = 0;
     status = SSLGetNumberSupportedCiphers(context, &supportedCount);
     if (status != noErr) {
         [report appendFormat:@"SSLGetNumberSupportedCiphers failed: %ld\n", (long)status];
-        SSLDisposeContext(context);
+        CFRelease(context);
         return report;
     }
 
@@ -73,7 +73,7 @@
         if (status != noErr) {
             [report appendFormat:@"SSLGetSupportedCiphers failed: %ld\n", (long)status];
             free(supported);
-            SSLDisposeContext(context);
+            CFRelease(context);
             return report;
         }
         supportedCount = supportedCapacity;
@@ -125,7 +125,7 @@
 
     if (enabled) free(enabled);
     if (supported) free(supported);
-    SSLDisposeContext(context);
+    CFRelease(context);
     return report;
 }
 
