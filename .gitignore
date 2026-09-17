@@ -1,5 +1,8 @@
 .theos/
 packages/
+Vendor/mbedtls/
+Resources/isrgrootx1.pem
+Resources/isrgrootx1.pem.tmp
 .DS_Store
 *.deb
 *.dylib
