@@ -20,6 +20,7 @@ iPad1MailBox_FRAMEWORKS = UIKit Foundation Security CFNetwork
 iPad1MailBox_CFLAGS = -fno-objc-arc -Wall
 iPad1MailBox_RESOURCE_DIRS = Resources
 iPad1MailBox_INSTALL_PATH = /Applications
+iPad1MailBox_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
 
