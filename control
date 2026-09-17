@@ -1,6 +1,6 @@
 Package: com.shapeloglu.ipad1mailbox
 Name: iPad1MailBox
-Version: 0.2-alpha2
+Version: 0.2-alpha3
 Architecture: iphoneos-arm
 Description: Lightweight IMAP/SMTP mail client for iPad 1 / iOS 5.1.1.
 Maintainer: SHapeloglu
