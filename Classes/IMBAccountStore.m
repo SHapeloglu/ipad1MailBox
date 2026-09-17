@@ -55,8 +55,8 @@ static NSString * const IMBKeychainService = @"com.shapeloglu.ipad1mailbox";
     return query;
 }
 
-- (void)storePassword:(NSString *)password forAccount:(IMBAccount *)account {
-    if (!password || [password length] == 0) return;
+- (OSStatus)storePassword:(NSString *)password forAccount:(IMBAccount *)account {
+    if (!account || !password || [password length] == 0) return errSecParam;
 
     NSMutableDictionary *query = [self keychainQueryForAccount:account];
     NSData *passwordData = [password dataUsingEncoding:NSUTF8StringEncoding];
@@ -64,14 +64,30 @@ static NSString * const IMBKeychainService = @"com.shapeloglu.ipad1mailbox";
     OSStatus status = SecItemUpdate((CFDictionaryRef)query, (CFDictionaryRef)attributes);
 
     if (status == errSecItemNotFound) {
-        [query setObject:passwordData forKey:(id)kSecValueData];
-        [query setObject:(id)kSecAttrAccessibleWhenUnlocked forKey:(id)kSecAttrAccessible];
-        SecItemAdd((CFDictionaryRef)query, NULL);
+        NSMutableDictionary *insert = [NSMutableDictionary dictionaryWithDictionary:query];
+        [insert setObject:passwordData forKey:(id)kSecValueData];
+        [insert setObject:(id)kSecAttrAccessibleWhenUnlocked forKey:(id)kSecAttrAccessible];
+        status = SecItemAdd((CFDictionaryRef)insert, NULL);
+
+        /* Some older jailbreak/keychain combinations reject accessibility metadata.
+           Retry without weakening storage into plist/defaults or logging the secret. */
+        if (status == errSecParam) {
+            [insert removeObjectForKey:(id)kSecAttrAccessible];
+            status = SecItemAdd((CFDictionaryRef)insert, NULL);
+        }
     }
+    return status;
 }
 
-- (void)addOrUpdateAccount:(IMBAccount *)account password:(NSString *)password {
-    if (!account) return;
+- (BOOL)addOrUpdateAccount:(IMBAccount *)account password:(NSString *)password keychainStatus:(NSInteger *)statusOut {
+    if (!account) {
+        if (statusOut) *statusOut = errSecParam;
+        return NO;
+    }
+
+    OSStatus keychainStatus = [self storePassword:password forAccount:account];
+    if (statusOut) *statusOut = (NSInteger)keychainStatus;
+    if (keychainStatus != errSecSuccess) return NO;
 
     NSUInteger existingIndex = NSNotFound;
     NSUInteger index = 0;
@@ -90,11 +106,13 @@ static NSString * const IMBKeychainService = @"com.shapeloglu.ipad1mailbox";
     }
 
     [self persistMetadata];
-    [self storePassword:password forAccount:account];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"IMBAccountsDidChangeNotification" object:self];
+    return YES;
 }
 
 - (NSString *)passwordForAccount:(IMBAccount *)account {
+    if (!account) return nil;
+
     NSMutableDictionary *query = [self keychainQueryForAccount:account];
     [query setObject:(id)kCFBooleanTrue forKey:(id)kSecReturnData];
     [query setObject:(id)kSecMatchLimitOne forKey:(id)kSecMatchLimit];
@@ -103,8 +121,9 @@ static NSString * const IMBKeychainService = @"com.shapeloglu.ipad1mailbox";
     OSStatus status = SecItemCopyMatching((CFDictionaryRef)query, &result);
     if (status != errSecSuccess || !result) return nil;
 
-    NSData *data = [(NSData *)result autorelease];
+    NSData *data = (NSData *)result;
     NSString *password = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
+    CFRelease(result);
     return password;
 }
 
