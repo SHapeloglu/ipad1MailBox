@@ -4,6 +4,7 @@
 #import "IMBTLSDiagnostics.h"
 #import "IMBModernTLSProbe.h"
 #import "IMBRFC2047Decoder.h"
+#import "IMBMessageReaderViewController.h"
 
 @implementation IMBMessageListViewController
 
@@ -104,17 +105,11 @@
 
     NSString *existing = _diagnosticsTextView.text ? _diagnosticsTextView.text : @"";
     NSRange marker = [existing rangeOfString:@"--- Modern TLS transport ---"];
-    if (marker.location != NSNotFound) {
-        existing = [existing substringToIndex:marker.location];
-    }
+    if (marker.location != NSNotFound) existing = [existing substringToIndex:marker.location];
 
     _diagnosticsTextView.text = [NSString stringWithFormat:@"%@--- Modern TLS transport ---\n%@",
                                  existing,
                                  report ? report : @"Probe returned no report.\n"];
-
-    /* The modern probe is the actionable part of the report. On the small
-     * iPad 1 screen, move directly to the newly completed probe result.
-     */
     if ([_diagnosticsTextView.text length] > 0) {
         NSRange endRange = NSMakeRange([_diagnosticsTextView.text length] - 1, 1);
         [_diagnosticsTextView scrollRangeToVisible:endRange];
@@ -181,15 +176,9 @@
     if ([_messages count] == 0) return;
 
     NSDictionary *message = [_messages objectAtIndex:(NSUInteger)indexPath.row];
-    NSString *subject = [message objectForKey:@"subject"];
-    if ([subject length] == 0) subject = @"Message";
-
-    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:subject
-                                                    message:@"The IMAP header was loaded successfully. Full message body loading is the next milestone."
-                                                   delegate:nil
-                                          cancelButtonTitle:@"OK"
-                                          otherButtonTitles:nil] autorelease];
-    [alert show];
+    IMBMessageReaderViewController *reader = [[[IMBMessageReaderViewController alloc] initWithAccount:_account
+                                                                                              message:message] autorelease];
+    [self.navigationController pushViewController:reader animated:YES];
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
@@ -217,11 +206,8 @@
     }
     _messages = [decodedMessages copy];
 
-    if ([_messages count] == 0) {
-        [self setStatusText:@"INBOX is empty."];
-    } else {
-        [self setStatusText:[NSString stringWithFormat:@"Loaded %lu messages", (unsigned long)[_messages count]]];
-    }
+    if ([_messages count] == 0) [self setStatusText:@"INBOX is empty."];
+    else [self setStatusText:[NSString stringWithFormat:@"Loaded %lu messages", (unsigned long)[_messages count]]];
     [self.tableView reloadData];
 }
 
