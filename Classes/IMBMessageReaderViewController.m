@@ -72,7 +72,8 @@
         body = @"No text/plain body was found in this message. HTML rendering and richer MIME support are planned for a later milestone.";
     }
     _textView.text = [self headerTextWithBody:body];
-    [_textView setContentOffset:CGPointZero animated:NO];
+    /* Avoid the external CGPointZero constant on the old iPhoneOS 6.1 SDK/linker path. */
+    [_textView setContentOffset:CGPointMake(0.0f, 0.0f) animated:NO];
 }
 
 - (void)imapClient:(IMBIMAPClient *)client didFailWithError:(NSError *)error {
