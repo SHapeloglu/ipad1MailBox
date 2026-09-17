@@ -1,0 +1,25 @@
+ARCHS = armv7
+TARGET = iphone:clang:6.1:5.1
+
+include $(THEOS)/makefiles/common.mk
+
+APPLICATION_NAME = iPad1MailBox
+
+iPad1MailBox_FILES = \
+	main.m \
+	Classes/IMBAppDelegate.m \
+	Classes/IMBAccount.m \
+	Classes/IMBAccountStore.m \
+	Classes/IMBAccountSetupViewController.m \
+	Classes/IMBInboxViewController.m \
+	Classes/IMBComposeViewController.m
+
+iPad1MailBox_FRAMEWORKS = UIKit Foundation Security
+iPad1MailBox_CFLAGS = -fno-objc-arc -Wall
+
+iPad1MailBox_INSTALL_PATH = /Applications
+
+include $(THEOS_MAKE_PATH)/application.mk
+
+after-install::
+	install.exec "killall iPad1MailBox || true"
