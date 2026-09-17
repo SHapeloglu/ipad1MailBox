@@ -195,6 +195,12 @@ static int IMBModernTLSVerifyTrace(void *data,
         goto cleanup;
     }
 
+#if defined(MBEDTLS_SSL_SERVER_NAME_INDICATION)
+    [report appendString:@"SNI ClientHello extension: ENABLED\n"];
+#else
+    [report appendString:@"SNI ClientHello extension: DISABLED\n"];
+#endif
+
     ret = mbedtls_ssl_set_hostname(&ssl, [host UTF8String]);
     if (ret != 0) {
         [report appendFormat:@"SNI/hostname: FAILED\n%@\n", [self errorTextForCode:ret]];
