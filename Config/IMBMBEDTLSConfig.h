@@ -1,8 +1,9 @@
 #ifndef IMB_MBEDTLS_CONFIG_H
 #define IMB_MBEDTLS_CONFIG_H
 
-/* iPad1MailBox: minimal TLS 1.2 client profile for iOS 5.1.1 / armv7.
- * Based on Mbed TLS config-suite-b.h, trimmed to the IMAP client needs.
+/* iPad1MailBox: TLS 1.2 client profile for iOS 5.1.1 / armv7.
+ * Keep the negotiated mail transport ECDHE-ECDSA + AES-GCM while retaining
+ * the X.509 signature algorithms needed to validate the public CA chain.
  */
 
 /* System support */
@@ -55,19 +56,18 @@
 #define MBEDTLS_X509_USE_C
 
 /*
- * RSA is enabled only so X.509 parsing can recognise/verify RSA PKCS#1 v1.5
- * signatures that may appear on cross-signed CA certificates in the server
- * chain. TLS key exchange remains ECDHE-ECDSA only; no RSA key-exchange suite
- * is enabled below.
+ * RSA is enabled for X.509 certificate parsing/signature verification only.
+ * The configured TLS cipher list below contains no RSA key-exchange suite.
  */
 
 /* Low-memory tuning for original iPad (256 MB RAM).
- * 48 bytes is enough for the P-384 EC path. The selected trust anchor is
- * ISRG Root X2 (ECDSA P-384), so a 4096-bit RSA trust-anchor key is not kept
- * in the application trust store.
+ * ISRG Root X1 has a 4096-bit RSA key, so MPI_MAX_SIZE must allow 512-byte
+ * integers. This is intentionally larger than the earlier ECC-only 48-byte
+ * limit; correctness comes first during transport bring-up and can be measured
+ * and optimized later.
  */
 #define MBEDTLS_AES_ROM_TABLES
-#define MBEDTLS_MPI_MAX_SIZE 48
+#define MBEDTLS_MPI_MAX_SIZE 512
 #define MBEDTLS_ECP_WINDOW_SIZE 2
 #define MBEDTLS_ECP_FIXED_POINT_OPTIM 0
 #define MBEDTLS_ECP_NIST_OPTIM
@@ -78,7 +78,7 @@
     MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, \
     MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
 
-/* The server currently sends a multi-certificate ECDSA chain larger than 4 KB.
+/* The server currently sends a multi-certificate chain larger than 4 KB.
  * Keep this comfortably above that while avoiding the default 16 KB buffers.
  */
 #define MBEDTLS_SSL_IN_CONTENT_LEN 8192
