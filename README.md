@@ -2,7 +2,7 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## Current milestone: v0.3-alpha2
+## Current milestone: v0.3-alpha3
 
 - Native Objective-C / UIKit split-view UI
 - Account metadata storage + Keychain-backed password storage
@@ -14,9 +14,12 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - Required X.509 certificate verification path
 - ISRG Root X1 trust anchor
 - RSA PKCS#1 v1.5 support for certificate-chain verification only; RSA TLS key exchange remains disabled
+- Read-only certificate verification trace for peer subject/SAN diagnostics
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
-The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha2` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha3` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+
+The latest physical-device gate is hostname verification: `0.3-alpha2` successfully loaded ISRG Root X1 and connected over TCP, then Mbed TLS reported `MBEDTLS_X509_BADCERT_CN_MISMATCH`. `0.3-alpha3` records the exact peer certificate/SAN data seen by Mbed TLS without modifying verification flags.
 
 See `TASK.md` for the exact active diagnostic gate.
 
@@ -60,12 +63,12 @@ make package FINALPACKAGE=1
 Expected package for this milestone:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha2_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha3_iphoneos-arm.deb
 ```
 
 ## TLS diagnostics
 
-Open an account and tap `TLS` in the Inbox toolbar. The diagnostics view first prints the iOS 5 SecureTransport cipher list and then runs the Mbed TLS probe on a background thread.
+Open an account and tap `TLS` in the Inbox toolbar. The diagnostics view first prints the iOS 5 SecureTransport cipher list and then runs the Mbed TLS probe on a background thread. When the modern probe finishes, the view scrolls to its result automatically.
 
 The modern probe reports:
 
@@ -74,10 +77,10 @@ The modern probe reports:
 - TCP connection
 - SNI / hostname setup
 - TLS handshake result
-- negotiated TLS version and cipher
-- certificate verification result
-- peer subject / issuer
-- first Dovecot IMAP greeting line
+- certificate verification depth/flags
+- peer certificate information as parsed by Mbed TLS, including SAN data
+- negotiated TLS version and cipher when the handshake succeeds
+- first Dovecot IMAP greeting line after full verification succeeds
 
 No certificate-verification bypass is used.
 
