@@ -10,11 +10,23 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - SecureTransport diagnostics for the iPad's real cipher capabilities
 - Mbed TLS 3.6.7 modern TLS 1.2 handshake probe
 - TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
-- Server hostname/SNI validation
-- Certificate-chain validation against bundled ISRG Root X1
+- Server hostname/SNI validation path
+- Required X.509 certificate verification path using bundled trust anchors
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
 The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha1` first proves the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+
+The current physical-device probe reaches Mbed TLS successfully but is still resolving certificate-signature support required to parse the bundled trust anchor. See `TASK.md` for the exact active issue.
+
+## Project documents
+
+- `ARCHITECTURE.md` - stable component boundaries, constraints, trust model, and transport design
+- `DECISIONS.md` - architecture decision log and rationale
+- `TASK.md` - the single active engineering task and definition of done
+- `SESSION.md` - latest development handoff, device result, commands, and resume point
+- `BACKLOG.md` - deferred features and future work
+
+When resuming development after a break, read `TASK.md` and `SESSION.md` first.
 
 ## Build target
 
@@ -27,7 +39,7 @@ The existing CFNetwork/SecureTransport IMAP path is still present for comparison
 
 ## One-time TLS bootstrap
 
-The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstrap them once after cloning/pulling:
+The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstrap them once after cloning/pulling, and rerun bootstrap after changes to `Config/IMBMBEDTLSConfig.h`:
 
 ```bash
 make bootstrap
@@ -38,6 +50,7 @@ This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific low-memory 
 ## Build
 
 ```bash
+find . -type f -exec touch {} +
 make clean
 make package FINALPACKAGE=1
 ```
@@ -80,4 +93,4 @@ Default future attachment storage root:
 
 ## Security
 
-Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path uses required X.509 verification and hostname/SNI checking.
+Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path requires X.509 verification and hostname/SNI checking.
