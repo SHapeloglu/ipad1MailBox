@@ -9,9 +9,12 @@
 #define MBEDTLS_HAVE_ASM
 #define MBEDTLS_HAVE_TIME
 #define MBEDTLS_HAVE_TIME_DATE
+#define MBEDTLS_PLATFORM_C
 
 /* iOS 5.x has no clock_gettime(). Provide the monotonic millisecond clock
  * from Classes/IMBMBEDTLSPlatform.c using mach_absolute_time().
+ * Mbed TLS requires MBEDTLS_PLATFORM_C together with MBEDTLS_HAVE_TIME for
+ * MBEDTLS_PLATFORM_MS_TIME_ALT.
  */
 #define MBEDTLS_PLATFORM_MS_TIME_ALT
 
