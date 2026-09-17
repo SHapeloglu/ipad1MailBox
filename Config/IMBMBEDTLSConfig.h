@@ -25,6 +25,14 @@
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 #define MBEDTLS_SSL_PROTO_TLS1_2
 
+/* Required for client-side Server Name Indication (SNI).
+ * mbedtls_ssl_set_hostname() supplies the hostname for verification, but the
+ * ClientHello server_name extension is emitted only when this option is
+ * enabled. The target IMAP endpoint is virtual-hosted and otherwise presents
+ * the provider default certificate instead of mail.olap.com.tr.
+ */
+#define MBEDTLS_SSL_SERVER_NAME_INDICATION
+
 /* Crypto and protocol modules */
 #define MBEDTLS_AES_C
 #define MBEDTLS_ASN1_PARSE_C
