@@ -110,6 +110,14 @@
     _diagnosticsTextView.text = [NSString stringWithFormat:@"%@--- Modern TLS transport ---\n%@",
                                  existing,
                                  report ? report : @"Probe returned no report.\n"];
+
+    /* The modern probe is the actionable part of the report. On the small
+     * iPad 1 screen, move directly to the newly completed probe result.
+     */
+    if ([_diagnosticsTextView.text length] > 0) {
+        NSRange endRange = NSMakeRange([_diagnosticsTextView.text length] - 1, 1);
+        [_diagnosticsTextView scrollRangeToVisible:endRange];
+    }
 }
 
 - (void)closeDiagnostics:(id)sender {
