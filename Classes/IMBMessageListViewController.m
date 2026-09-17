@@ -1,6 +1,7 @@
 #import "IMBMessageListViewController.h"
 #import "IMBAccount.h"
 #import "IMBAccountStore.h"
+#import "IMBTLSDiagnostics.h"
 
 @implementation IMBMessageListViewController
 
@@ -23,7 +24,11 @@
     UIBarButtonItem *refresh = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh
                                                                               target:self
                                                                               action:@selector(refreshPressed:)] autorelease];
-    self.navigationItem.rightBarButtonItem = refresh;
+    UIBarButtonItem *tls = [[[UIBarButtonItem alloc] initWithTitle:@"TLS"
+                                                             style:UIBarButtonItemStyleBordered
+                                                            target:self
+                                                            action:@selector(tlsDiagnosticsPressed:)] autorelease];
+    self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:refresh, tls, nil];
 
     [self beginLoading];
 }
@@ -58,6 +63,34 @@
     [_client cancel];
     _loading = NO;
     [self beginLoading];
+}
+
+- (void)tlsDiagnosticsPressed:(id)sender {
+    NSString *report = [IMBTLSDiagnostics diagnosticReportForHost:_account.imapHost port:_account.imapPort];
+
+    UIViewController *controller = [[[UIViewController alloc] init] autorelease];
+    controller.title = @"TLS Diagnostics";
+    controller.view.backgroundColor = [UIColor whiteColor];
+
+    UITextView *textView = [[[UITextView alloc] initWithFrame:controller.view.bounds] autorelease];
+    textView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    textView.editable = NO;
+    textView.font = [UIFont fontWithName:@"Courier" size:12.0f];
+    if (!textView.font) textView.font = [UIFont systemFontOfSize:12.0f];
+    textView.text = report;
+    [controller.view addSubview:textView];
+
+    controller.navigationItem.rightBarButtonItem = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                                                                                                    target:self
+                                                                                                    action:@selector(closeDiagnostics:)] autorelease];
+
+    UINavigationController *navigation = [[[UINavigationController alloc] initWithRootViewController:controller] autorelease];
+    navigation.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentModalViewController:navigation animated:YES];
+}
+
+- (void)closeDiagnostics:(id)sender {
+    [self dismissModalViewControllerAnimated:YES];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -144,8 +177,9 @@
     [self setStatusText:[error localizedDescription]];
     [self.tableView reloadData];
 
+    NSString *message = [NSString stringWithFormat:@"%@\n\nTap TLS in the Inbox toolbar to inspect this iPad's SecureTransport cipher support.", [error localizedDescription]];
     UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:@"IMAP Error"
-                                                    message:[error localizedDescription]
+                                                    message:message
                                                    delegate:nil
                                           cancelButtonTitle:@"OK"
                                           otherButtonTitles:nil] autorelease];
