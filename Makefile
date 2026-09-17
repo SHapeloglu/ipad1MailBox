@@ -12,9 +12,11 @@ iPad1MailBox_FILES = \
 	Classes/IMBAccountStore.m \
 	Classes/IMBAccountSetupViewController.m \
 	Classes/IMBInboxViewController.m \
-	Classes/IMBComposeViewController.m
+	Classes/IMBComposeViewController.m \
+	Classes/IMBIMAPClient.m \
+	Classes/IMBMessageListViewController.m
 
-iPad1MailBox_FRAMEWORKS = UIKit Foundation Security
+iPad1MailBox_FRAMEWORKS = UIKit Foundation Security CFNetwork
 iPad1MailBox_CFLAGS = -fno-objc-arc -Wall
 iPad1MailBox_RESOURCE_DIRS = Resources
 iPad1MailBox_INSTALL_PATH = /Applications
