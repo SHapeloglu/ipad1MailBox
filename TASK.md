@@ -4,82 +4,79 @@ _Last updated: 2026-09-17_
 
 ## Goal
 
-Validate readable RFC 2047-decoded Subject and From headers on the physical iPad 1 while preserving the now-working Mbed TLS Inbox path.
+Validate the first on-demand message reader on the physical iPad 1 while preserving the now-working Mbed TLS Inbox and RFC 2047 header decoding.
 
-## Transport gate: PASSED
+## Completed gates
 
-`0.4-alpha1` was successfully tested on the physical iPad. Normal Inbox loading now works over `IMBMBEDTLSTransport`:
+`0.4-alpha1` proved normal Inbox loading over `IMBMBEDTLSTransport`:
 
 ```text
-Mbed TLS 3.6.7
--> verified TLS 1.2
+verified Mbed TLS 1.2
 -> LOGIN
 -> SELECT INBOX
 -> FETCH latest headers
 -> message list displayed
 ```
 
-The legacy normal-Inbox `OSStatus -9844` SecureTransport failure is no longer present.
+`0.4-alpha2` was then tested successfully on the physical iPad. UTF-8 and ISO-8859-9 RFC 2047 Subject/From values now display as readable Turkish text.
 
-## Current visible issue
+## 0.5-alpha1 implementation prepared
 
-Some real messages display raw RFC 2047 encoded words, for example:
+Selecting an Inbox row now pushes `IMBMessageReaderViewController` instead of showing the old placeholder alert.
 
-```text
-=?UTF-8?Q?Yeni_Oturum_Kayd=C4=B1...?=
-=?iso-8859-9?Q?...?=
-```
-
-## 0.4-alpha2 implementation prepared
-
-New files:
+The reader requests the selected message by IMAP UID over the same verified Mbed TLS transport:
 
 ```text
-Classes/IMBRFC2047Decoder.h
-Classes/IMBRFC2047Decoder.m
+connect / LOGIN / SELECT INBOX
+-> UID FETCH <uid> BODY.PEEK[]<0.262144>
+-> extract IMAP literal
+-> parse MIME
+-> display first non-attachment text/plain part
 ```
 
-The decoder supports:
+New MIME support is deliberately bounded and conservative:
 
-- RFC 2047 `Q` encoded words
-- RFC 2047 `B` / Base64 encoded words
-- adjacent encoded words with folding whitespace
-- UTF-8
-- US-ASCII
-- ISO-8859-1
-- IANA charset conversion through CoreFoundation, including ISO-8859-9 / Windows-1254 when recognized by the platform
-- malformed/unsupported words are preserved rather than silently discarded
-
-Inbox presentation decodes `Subject` and `From` once when fetched messages are accepted by the view controller.
+- maximum fetched raw message prefix: 256 KB
+- total IMAP response safety limit remains 512 KB
+- text/plain only for this milestone
+- multipart recursion with a small depth limit
+- quoted-printable body decoding
+- Base64 body decoding
+- charset conversion through CoreFoundation
+- attachment parts are skipped
+- HTML rendering is not enabled yet
 
 ## Next actions
 
-1. Pull `0.4-alpha2`.
-2. Build; no Mbed TLS bootstrap/config change is required.
+1. Pull and build `0.5-alpha1`.
+2. No Mbed TLS bootstrap/config change is required.
 3. Install on the physical iPad.
-4. Open `info@olap.com.tr -> Inbox`.
-5. Confirm previously raw UTF-8 and ISO-8859-9 subjects display as readable Turkish text.
-6. Confirm encoded sender display names are readable.
-7. Tap refresh once and confirm headers remain correct.
-8. If header decoding passes, move to on-demand message-body loading as the next milestone.
+4. Open Inbox and tap several different messages.
+5. Confirm Subject / From / Date remain visible and a plain-text body loads below them.
+6. Test at least one multipart message and one Turkish message if available.
+7. Return to Inbox and open another message to exercise cancellation/lifecycle behavior.
+8. If a message has no text/plain part, the reader should show the explicit fallback rather than crash.
 
 ## Acceptance criteria
 
-- Inbox still loads over verified Mbed TLS
-- RFC 2047 UTF-8 Q/B headers decode correctly
-- ISO-8859-9 Turkish headers decode correctly on-device
-- adjacent/folded encoded words do not gain artificial spaces
-- plain ASCII headers remain unchanged
-- unsupported/malformed encoded words do not crash the app
-- refresh still works
+- Inbox continues to load normally
+- tapping a row opens a real reader screen
+- selected message is fetched by UID, not sequence number
+- text/plain body is shown when present
+- quoted-printable and Base64 text bodies decode correctly
+- common charsets, including Turkish legacy charsets recognized by CoreFoundation, display correctly
+- large messages are bounded to a 256 KB preview
+- HTML-only or unsupported MIME messages fail gracefully
+- credentials remain only in Keychain
+- TLS certificate and hostname verification remain mandatory
 
 ## Do not
 
 - Do not weaken TLS verification.
-- Do not change the working IMAP transport in this task.
-- Do not add SMTP, attachments, HTML rendering, or offline cache yet.
-- Do not use modern Base64 APIs unavailable on iOS 5.1.1.
+- Do not fetch entire unbounded messages or attachments.
+- Do not render HTML yet.
+- Do not add SMTP, attachment downloads, or offline cache in this milestone.
 
 ## Definition of done
 
-The task is complete when the physical iPad displays the current Inbox with readable Turkish Subject/From fields instead of raw `=?charset?Q/B?...?=` strings, while `0.4-alpha1` transport behavior remains stable.
+The task is complete when the physical iPad can open several real Inbox messages and display their readable text/plain body on demand without destabilizing the existing Inbox path.
