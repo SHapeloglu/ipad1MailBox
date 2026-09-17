@@ -90,6 +90,26 @@
     return cell;
 }
 
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    return [[[IMBAccountStore sharedStore] accounts] count] > 0;
+}
+
+- (void)tableView:(UITableView *)tableView
+commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
+forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle != UITableViewCellEditingStyleDelete) return;
+
+    NSArray *accounts = [[IMBAccountStore sharedStore] accounts];
+    if (indexPath.row >= (NSInteger)[accounts count]) return;
+
+    IMBAccount *account = [accounts objectAtIndex:indexPath.row];
+    [[IMBAccountStore sharedStore] removeAccount:account];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForDeleteConfirmationButtonForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return @"Delete";
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSArray *accounts = [[IMBAccountStore sharedStore] accounts];
     if ([accounts count] == 0) return;
