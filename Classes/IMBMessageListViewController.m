@@ -2,6 +2,7 @@
 #import "IMBAccount.h"
 #import "IMBAccountStore.h"
 #import "IMBTLSDiagnostics.h"
+#import "IMBModernTLSProbe.h"
 
 @implementation IMBMessageListViewController
 
@@ -77,8 +78,11 @@
     textView.editable = NO;
     textView.font = [UIFont fontWithName:@"Courier" size:12.0f];
     if (!textView.font) textView.font = [UIFont systemFontOfSize:12.0f];
-    textView.text = report;
+    textView.text = [NSString stringWithFormat:@"%@\n\n--- Modern TLS transport ---\nStarting Mbed TLS 3.6.7 probe...", report];
     [controller.view addSubview:textView];
+
+    [_diagnosticsTextView release];
+    _diagnosticsTextView = [textView retain];
 
     controller.navigationItem.rightBarButtonItem = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                                                                                                     target:self
@@ -87,9 +91,30 @@
     UINavigationController *navigation = [[[UINavigationController alloc] initWithRootViewController:controller] autorelease];
     navigation.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentModalViewController:navigation animated:YES];
+
+    [IMBModernTLSProbe runForHost:_account.imapHost
+                             port:_account.imapPort
+                           target:self
+                         selector:@selector(modernTLSProbeFinished:)];
+}
+
+- (void)modernTLSProbeFinished:(NSString *)report {
+    if (!_diagnosticsTextView) return;
+
+    NSString *existing = _diagnosticsTextView.text ? _diagnosticsTextView.text : @"";
+    NSRange marker = [existing rangeOfString:@"--- Modern TLS transport ---"];
+    if (marker.location != NSNotFound) {
+        existing = [existing substringToIndex:marker.location];
+    }
+
+    _diagnosticsTextView.text = [NSString stringWithFormat:@"%@--- Modern TLS transport ---\n%@",
+                                 existing,
+                                 report ? report : @"Probe returned no report.\n"];
 }
 
 - (void)closeDiagnostics:(id)sender {
+    [_diagnosticsTextView release];
+    _diagnosticsTextView = nil;
     [self dismissModalViewControllerAnimated:YES];
 }
 
@@ -177,7 +202,7 @@
     [self setStatusText:[error localizedDescription]];
     [self.tableView reloadData];
 
-    NSString *message = [NSString stringWithFormat:@"%@\n\nTap TLS in the Inbox toolbar to inspect this iPad's SecureTransport cipher support.", [error localizedDescription]];
+    NSString *message = [NSString stringWithFormat:@"%@\n\nTap TLS in the Inbox toolbar to inspect SecureTransport and run the Mbed TLS probe.", [error localizedDescription]];
     UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:@"IMAP Error"
                                                     message:message
                                                    delegate:nil
@@ -193,6 +218,7 @@
     [_account release];
     [_messages release];
     [_statusText release];
+    [_diagnosticsTextView release];
     [super dealloc];
 }
 
