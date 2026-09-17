@@ -44,6 +44,8 @@
 #define MBEDTLS_PEM_PARSE_C
 #define MBEDTLS_PK_C
 #define MBEDTLS_PK_PARSE_C
+#define MBEDTLS_PKCS1_V15
+#define MBEDTLS_RSA_C
 #define MBEDTLS_SHA256_C
 #define MBEDTLS_SHA384_C
 #define MBEDTLS_SHA512_C
@@ -52,7 +54,18 @@
 #define MBEDTLS_X509_CRT_PARSE_C
 #define MBEDTLS_X509_USE_C
 
-/* Low-memory tuning for original iPad (256 MB RAM). */
+/*
+ * RSA is enabled only so X.509 parsing can recognise/verify RSA PKCS#1 v1.5
+ * signatures that may appear on cross-signed CA certificates in the server
+ * chain. TLS key exchange remains ECDHE-ECDSA only; no RSA key-exchange suite
+ * is enabled below.
+ */
+
+/* Low-memory tuning for original iPad (256 MB RAM).
+ * 48 bytes is enough for the P-384 EC path. The selected trust anchor is
+ * ISRG Root X2 (ECDSA P-384), so a 4096-bit RSA trust-anchor key is not kept
+ * in the application trust store.
+ */
 #define MBEDTLS_AES_ROM_TABLES
 #define MBEDTLS_MPI_MAX_SIZE 48
 #define MBEDTLS_ECP_WINDOW_SIZE 2
