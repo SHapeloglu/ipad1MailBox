@@ -16,10 +16,10 @@ iPad1MailBox_FILES = \
 
 iPad1MailBox_FRAMEWORKS = UIKit Foundation Security
 iPad1MailBox_CFLAGS = -fno-objc-arc -Wall
-
+iPad1MailBox_RESOURCE_DIRS = Resources
 iPad1MailBox_INSTALL_PATH = /Applications
 
 include $(THEOS_MAKE_PATH)/application.mk
 
 after-install::
-	install.exec "killall iPad1MailBox || true"
+	install.exec "killall iPad1MailBox 2>/dev/null || true"
