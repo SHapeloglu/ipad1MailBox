@@ -59,8 +59,8 @@ static NSData *IMBDecodeQEncodedWord(NSString *text) {
 
 static NSData *IMBDecodeBase64EncodedWord(NSString *text) {
     NSMutableData *data = [NSMutableData data];
-    int accumulator = 0;
-    int bits = -8;
+    unsigned int accumulator = 0;
+    int bitCount = 0;
     NSUInteger length = [text length];
     NSUInteger i;
 
@@ -74,12 +74,19 @@ static NSData *IMBDecodeBase64EncodedWord(NSString *text) {
             return nil;
         }
 
-        accumulator = (accumulator << 6) | value;
-        bits += 6;
-        if (bits >= 0) {
-            uint8_t byte = (uint8_t)((accumulator >> bits) & 0xFF);
+        accumulator = (accumulator << 6) | (unsigned int)value;
+        bitCount += 6;
+
+        if (bitCount >= 8) {
+            bitCount -= 8;
+            uint8_t byte = (uint8_t)((accumulator >> bitCount) & 0xFFU);
             [data appendBytes:&byte length:1];
-            bits -= 8;
+
+            if (bitCount == 0) {
+                accumulator = 0;
+            } else {
+                accumulator &= ((1U << bitCount) - 1U);
+            }
         }
     }
 
