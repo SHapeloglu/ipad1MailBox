@@ -90,3 +90,22 @@ ISRG Root X1 uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised to 512
 This does **not** enable RSA TLS key exchange. The configured TLS cipher suites remain ECDHE-ECDSA + AES-GCM only.
 
 **Reason:** Validate the server's normal public chain first, then optimize memory or trust-anchor choices only after the end-to-end transport is proven on the physical iPad.
+
+## ADR-011 - Enable ClientHello SNI explicitly
+
+**Status:** Accepted
+
+The `0.3-alpha3` device trace proved that calling `mbedtls_ssl_set_hostname()` alone was not enough in the project's minimal build. Hostname verification was active, but the ClientHello did not carry the `server_name` extension because `MBEDTLS_SSL_SERVER_NAME_INDICATION` was not enabled.
+
+The virtual-hosted IMAP server therefore returned its default certificate:
+
+```text
+CN=da2.mirahosting.com
+SAN=da2.mirahosting.com
+```
+
+rather than the certificate selected for `mail.olap.com.tr`.
+
+**Decision:** Enable `MBEDTLS_SSL_SERVER_NAME_INDICATION` and continue using `mbedtls_ssl_set_hostname()` so the same hostname is both transmitted via SNI and verified against the received certificate.
+
+**Security consequence:** This fixes virtual-host certificate selection without relaxing root, chain, or hostname verification.
