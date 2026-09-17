@@ -3,6 +3,7 @@
 #import "IMBAccountStore.h"
 #import "IMBTLSDiagnostics.h"
 #import "IMBModernTLSProbe.h"
+#import "IMBRFC2047Decoder.h"
 
 @implementation IMBMessageListViewController
 
@@ -195,7 +196,26 @@
 - (void)imapClient:(IMBIMAPClient *)client didLoadMessages:(NSArray *)messages {
     _loading = NO;
     [_messages release];
-    _messages = [messages copy];
+
+    NSMutableArray *decodedMessages = [NSMutableArray arrayWithCapacity:[messages count]];
+    for (NSDictionary *message in messages) {
+        NSMutableDictionary *decodedMessage = [[message mutableCopy] autorelease];
+
+        NSString *subject = [decodedMessage objectForKey:@"subject"];
+        if ([subject length] > 0) {
+            NSString *decodedSubject = [IMBRFC2047Decoder decodeHeaderValue:subject];
+            if (decodedSubject) [decodedMessage setObject:decodedSubject forKey:@"subject"];
+        }
+
+        NSString *from = [decodedMessage objectForKey:@"from"];
+        if ([from length] > 0) {
+            NSString *decodedFrom = [IMBRFC2047Decoder decodeHeaderValue:from];
+            if (decodedFrom) [decodedMessage setObject:decodedFrom forKey:@"from"];
+        }
+
+        [decodedMessages addObject:decodedMessage];
+    }
+    _messages = [decodedMessages copy];
 
     if ([_messages count] == 0) {
         [self setStatusText:@"INBOX is empty."];
