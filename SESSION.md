@@ -4,15 +4,9 @@ _Last updated: 2026-09-17_
 
 ## Where we are
 
-The project is validating a bundled Mbed TLS 3.6.7 transport on the physical iPad 1.
+The modern TLS bring-up phase is complete on the physical iPad 1. `iPad1MailBox 0.3-alpha4` successfully established and verified a TLS 1.2 IMAPS connection to the production-style endpoint.
 
 Latest tested build:
-
-```text
-iPad1MailBox 0.3-alpha3
-```
-
-Next build:
 
 ```text
 iPad1MailBox 0.3-alpha4
@@ -25,7 +19,7 @@ mail.olap.com.tr:993
 implicit TLS / IMAPS
 ```
 
-## Proven so far
+## What is now proven on the physical iPad
 
 ### Keychain
 
@@ -33,131 +27,80 @@ The earlier `errSecInteractionNotAllowed (-25308)` issue was fixed with applicat
 
 ### SecureTransport limitation
 
-The physical iPad supports 53 SecureTransport cipher suites but not the ECDHE-ECDSA AES-GCM suites required by the server. Server-side OpenSSL tests also showed that the older CBC ECDHE-ECDSA suites available on iOS 5 are rejected.
+The physical iPad's iOS 5.1.1 SecureTransport cannot negotiate the modern ECDHE-ECDSA AES-GCM suites required by the server. Older CBC suites supported by the device are rejected by the server.
 
-### Mbed TLS integration
+### Mbed TLS 3.6.7
 
-Mbed TLS 3.6.7 compiles into the armv7 application. iOS 5 timer compatibility is provided through `MBEDTLS_PLATFORM_MS_TIME_ALT`, `MBEDTLS_PLATFORM_C`, and `mach_absolute_time()` in `IMBMBEDTLSPlatform.c`.
+Mbed TLS compiles into the armv7 application with the iPhoneOS 6.1 SDK. iOS 5 timer compatibility is provided through `MBEDTLS_PLATFORM_MS_TIME_ALT`, `MBEDTLS_PLATFORM_C`, and `mach_absolute_time()`.
 
-### RSA/X.509 trust-anchor support
+### Trust chain
 
-`0.3-alpha2` added RSA PKCS#1 v1.5 support for certificate validation and raised `MBEDTLS_MPI_MAX_SIZE` to 512 so ISRG Root X1 can be parsed. RSA TLS key exchange remains disabled.
+ISRG Root X1 parses and verifies after enabling RSA PKCS#1 v1.5 certificate-signature support and raising `MBEDTLS_MPI_MAX_SIZE` to 512 for the 4096-bit root key. RSA TLS key exchange remains disabled.
 
-## Latest physical-device result: 0.3-alpha3
+### SNI / hostname
 
-The verification trace isolated the hostname failure precisely.
+`0.3-alpha3` showed that without `MBEDTLS_SSL_SERVER_NAME_INDICATION`, the server returned its default `da2.mirahosting.com` certificate. `0.3-alpha4` enabled ClientHello SNI and retained `mbedtls_ssl_set_hostname()` for hostname verification.
 
-Chain depths 1-4 verify cleanly:
+The server then presented the expected certificate:
 
 ```text
+subject name: CN=olap.com.tr
+subject alt name includes:
+  olap.com.tr
+  pop.olap.com.tr
+  smtp.olap.com.tr
+  mail.olap.com.tr
+  www.olap.com.tr
+```
+
+All verification depths now report zero flags.
+
+## Successful 0.3-alpha4 device result
+
+```text
+RNG seed: OK
+CA trust anchor: ISRG Root X1 loaded
+TCP connect: OK
+SNI ClientHello extension: ENABLED
+SNI/hostname: mail.olap.com.tr
 Verify callback: depth=4 flags=0x00000000
 Verify callback: depth=3 flags=0x00000000
 Verify callback: depth=2 flags=0x00000000
 Verify callback: depth=1 flags=0x00000000
+Verify callback: depth=0 flags=0x00000000
+TLS handshake: OK
+Protocol: TLSv1.2
+Cipher: TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384
+Certificate verification: OK
+IMAP greeting: * OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ AUTH=PLAIN] Dovecot DA ready.
 ```
 
-Only the leaf has:
+This completes the TLS validation gate defined for `IMBModernTLSProbe`.
+
+## Next engineering step
+
+Move the existing minimal IMAP flow from SecureTransport to a reusable Mbed TLS transport:
 
 ```text
-Verify callback: depth=0 flags=0x00000004
+connect/TLS
+-> greeting
+-> LOGIN
+-> SELECT INBOX
+-> latest UID/header fetch
 ```
 
-The actual leaf certificate received by the iPad is:
-
-```text
-subject name  : CN=da2.mirahosting.com
-subject alt name:
-    dNSName : da2.mirahosting.com
-```
-
-So the mismatch is legitimate: the device received the hosting provider's default certificate rather than the virtual host certificate for `mail.olap.com.tr`.
-
-## Root cause
-
-The code already called:
-
-```text
-mbedtls_ssl_set_hostname(&ssl, "mail.olap.com.tr")
-```
-
-which enabled hostname verification, but `Config/IMBMBEDTLSConfig.h` did not define:
-
-```text
-MBEDTLS_SSL_SERVER_NAME_INDICATION
-```
-
-In Mbed TLS 3.6.7 the ClientHello `server_name` extension is written only when this configuration option is enabled. Therefore the TLS client verified against `mail.olap.com.tr` without actually sending SNI to the virtual-hosted server.
-
-That caused the server to select the default `da2.mirahosting.com` certificate.
-
-## 0.3-alpha4 fix prepared
-
-The Mbed TLS config now enables:
-
-```text
-MBEDTLS_SSL_SERVER_NAME_INDICATION
-```
-
-The probe additionally prints:
-
-```text
-SNI ClientHello extension: ENABLED
-```
-
-Verification is not weakened. `MBEDTLS_SSL_VERIFY_REQUIRED`, hostname checking, ISRG Root X1, and the ECDHE-ECDSA + AES-GCM cipher restriction remain in place.
-
-## Build commands
-
-Because the Mbed TLS config changed, rerun bootstrap after pulling:
-
-```bash
-cd ~/projects/ipad1MailBox
-git pull origin main
-make bootstrap
-find . -type f -exec touch {} +
-make clean
-make package FINALPACKAGE=1
-```
-
-Expected package:
-
-```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha4_iphoneos-arm.deb
-```
-
-Copy:
-
-```bash
-scp -o HostKeyAlgorithms=+ssh-rsa \
--o PubkeyAcceptedAlgorithms=+ssh-rsa \
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha4_iphoneos-arm.deb \
-root@192.168.1.100:/var/mobile/
-```
-
-Install:
-
-```bash
-dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.3-alpha4_iphoneos-arm.deb
-su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
-killall SpringBoard
-```
-
-Verify:
-
-```bash
-dpkg -s com.shapeloglu.ipad1mailbox | grep Version
-```
+Preserve the existing IMAP parser where practical. Do not add SMTP/MIME/attachments in the same integration step.
 
 ## Important code locations
 
-- `Classes/IMBIMAPClient.m` - current legacy IMAP transport
+- `Classes/IMBIMAPClient.m` - current legacy IMAP command/parser flow
 - `Classes/IMBTLSDiagnostics.m` - SecureTransport diagnostics
-- `Classes/IMBModernTLSProbe.m` - Mbed TLS device probe + read-only verification trace
+- `Classes/IMBModernTLSProbe.m` - proven Mbed TLS device probe
 - `Classes/IMBMBEDTLSPlatform.c` - iOS 5 timer compatibility
-- `Config/IMBMBEDTLSConfig.h` - Mbed TLS feature set including client SNI
+- `Config/IMBMBEDTLSConfig.h` - Mbed TLS feature set including ClientHello SNI
 - `scripts/bootstrap_mbedtls.sh` - Mbed TLS + ISRG Root X1 bootstrap
 - `Makefile` - armv7 build
 
 ## Resume here
 
-Open `TASK.md`. Build/install `0.3-alpha4`, run the TLS probe, and confirm that SNI is enabled and the server now presents the `mail.olap.com.tr` certificate. If the handshake then succeeds, the next step is to move the existing IMAP `LOGIN -> SELECT INBOX -> FETCH` flow onto the Mbed TLS transport.
+Read `TASK.md` first. The active task is no longer TLS diagnosis; it is Mbed TLS IMAP transport integration. The physical TLS gate has passed, so normal Inbox traffic can now be moved off SecureTransport.
