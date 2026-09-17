@@ -4,106 +4,76 @@ _Last updated: 2026-09-17_
 
 ## Where we are
 
-The modern TLS bring-up phase is complete on the physical iPad 1. `0.3-alpha4` proved the full verified TLS 1.2 path. The repository has now advanced to the first normal Inbox build using a reusable Mbed TLS transport.
+The physical iPad 1 has successfully loaded the real Inbox over the reusable Mbed TLS transport. The transport migration is no longer the active blocker.
 
 Latest proven device build:
-
-```text
-iPad1MailBox 0.3-alpha4
-```
-
-Next functional test build:
 
 ```text
 iPad1MailBox 0.4-alpha1
 ```
 
-Target server:
+Next test build:
 
 ```text
-mail.olap.com.tr:993
-implicit TLS / IMAPS
+iPad1MailBox 0.4-alpha2
 ```
 
 ## Proven on the physical iPad
 
-```text
-RNG seed: OK
-CA trust anchor: ISRG Root X1 loaded
-TCP connect: OK
-SNI ClientHello extension: ENABLED
-SNI/hostname: mail.olap.com.tr
-certificate verification depths 0-4: flags=0
-TLS handshake: OK
-Protocol: TLSv1.2
-Cipher: TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384
-Certificate verification: OK
-IMAP greeting: * OK ... Dovecot DA ready.
-```
-
-The earlier Keychain entitlement issue, iOS 5 `clock_gettime()` incompatibility, RSA/X.509 trust-anchor support, and ClientHello SNI problem are all resolved.
-
-## 0.4-alpha1 changes prepared
-
-### New reusable transport
-
-Files:
+Normal Inbox now completes:
 
 ```text
-Classes/IMBMBEDTLSTransport.h
-Classes/IMBMBEDTLSTransport.m
-```
-
-Responsibilities:
-
-- Mbed TLS context lifecycle
-- RNG + ISRG Root X1 trust setup
-- TCP connect
-- TLS 1.2 handshake
-- SNI and hostname verification
-- mandatory X.509 verification
-- encrypted read/write
-- timeout handling
-- cancellation through socket shutdown
-- clean TLS close
-
-### IMAP migration
-
-`IMBIMAPClient` no longer uses `NSInputStream` / `NSOutputStream` / CFStream SecureTransport for normal Inbox loading.
-
-The protocol flow now executes on a background thread through `IMBMBEDTLSTransport`:
-
-```text
-greeting
+verified Mbed TLS 1.2 connection
 -> LOGIN
 -> SELECT INBOX
--> read EXISTS
 -> FETCH latest 25 headers
--> LOGOUT
+-> message list rendered
 ```
 
-Concurrency protection:
+The old normal-operation SecureTransport `OSStatus -9844` error is gone.
 
-- each fetch receives a generation token
-- cancel/refresh increments the token
-- active transport is cancelled
-- stale worker results are ignored
+The message list screenshot confirmed real subjects, senders and dates are being fetched. Refresh/cancel infrastructure remains based on the generation-token + reusable transport design.
 
-Safety limits:
+## Current visible problem
+
+Several real Subject and From fields are RFC 2047 encoded words and are shown raw, including UTF-8 and ISO-8859-9 examples.
+
+Examples:
 
 ```text
-command timeout: 20 seconds
-maximum accumulated IMAP response: 512 KB
+=?UTF-8?Q?...=C4=B1...?=
+=?iso-8859-9?Q?...?=
 ```
 
-Credentials are still sourced from Keychain and are never logged.
+## 0.4-alpha2 changes prepared
+
+New decoder:
+
+```text
+Classes/IMBRFC2047Decoder.h
+Classes/IMBRFC2047Decoder.m
+```
+
+Capabilities:
+
+- Q encoded-word decoding (`_` -> space, `=HH` bytes)
+- Base64 encoded-word decoding without iOS 7+ NSData APIs
+- adjacent encoded-word handling
+- UTF-8 / ASCII / ISO-8859-1 mappings
+- general IANA charset conversion through CoreFoundation, covering Turkish legacy charsets such as ISO-8859-9 when available
+- safe preservation of unsupported or malformed content
+
+`IMBMessageListViewController` now normalizes Subject and From once in `didLoadMessages:` before storing the UI message array.
+
+`Makefile` now compiles `IMBRFC2047Decoder.m` and links CoreFoundation explicitly.
 
 ## Build commands
+
+No Mbed TLS config changed, so `make bootstrap` is not required if `0.4-alpha1` already built successfully.
 
 ```bash
 cd ~/projects/ipad1MailBox
 git pull origin main
-make bootstrap
 find . -type f -exec touch {} +
 make clean
 make package FINALPACKAGE=1
@@ -112,7 +82,7 @@ make package FINALPACKAGE=1
 Expected package:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
 ```
 
 Copy:
@@ -120,41 +90,30 @@ Copy:
 ```bash
 scp -o HostKeyAlgorithms=+ssh-rsa \
 -o PubkeyAcceptedAlgorithms=+ssh-rsa \
-packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb \
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb \
 root@192.168.1.100:/var/mobile/
 ```
 
 Install:
 
 ```bash
-dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
+dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
 su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
 killall SpringBoard
 ```
 
-Verify:
-
-```bash
-dpkg -s com.shapeloglu.ipad1mailbox | grep Version
-```
-
 ## What to test next
 
-1. Open `info@olap.com.tr`.
-2. Inbox should connect without `OSStatus -9844`.
-3. Up to 25 latest headers should appear.
-4. Tap refresh once and confirm the list reloads correctly.
-5. Keep the `TLS` diagnostics button for comparison; normal Inbox should no longer depend on SecureTransport.
+Open the same Inbox and compare messages that previously displayed raw encoded words. Confirm UTF-8 and ISO-8859-9 Turkish subjects/sender names are readable and one refresh still behaves correctly.
 
 ## Important code locations
 
-- `Classes/IMBMBEDTLSTransport.m` - reusable verified TLS transport
-- `Classes/IMBIMAPClient.m` - background IMAP command/parser flow
-- `Classes/IMBModernTLSProbe.m` - proven diagnostic path
-- `Classes/IMBTLSDiagnostics.m` - legacy SecureTransport capability diagnostics
-- `Config/IMBMBEDTLSConfig.h` - Mbed TLS feature/cipher configuration
-- `TASK.md` - active physical-device test gate
+- `Classes/IMBMBEDTLSTransport.m` - proven reusable TLS transport
+- `Classes/IMBIMAPClient.m` - working background IMAP header fetch
+- `Classes/IMBRFC2047Decoder.m` - current header-decoding task
+- `Classes/IMBMessageListViewController.m` - applies decoded presentation values
+- `TASK.md` - current physical-device test gate
 
 ## Resume here
 
-Build `0.4-alpha1`. If it compiles, install and test normal Inbox loading plus one refresh. Do not begin body/MIME/SMTP work until those two operations pass on the physical iPad.
+Build/install `0.4-alpha2`, inspect the same messages shown in the successful `0.4-alpha1` screenshot, and verify Turkish encoded headers are now readable. If that passes, start on-demand message-body fetching next.
