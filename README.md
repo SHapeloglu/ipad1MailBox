@@ -2,37 +2,35 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## Current milestone: v0.3-alpha4
+## Current milestone: v0.4-alpha1
 
 - Native Objective-C / UIKit split-view UI
 - Account metadata storage + Keychain-backed password storage
-- Minimal IMAP header loader (`LOGIN` -> `SELECT INBOX` -> latest header fetch)
-- SecureTransport diagnostics for the iPad's real cipher capabilities
-- Mbed TLS 3.6.7 modern TLS 1.2 handshake probe
-- TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
-- Client-side SNI (`server_name`) support for virtual-hosted mail endpoints
-- Server hostname validation through `mbedtls_ssl_set_hostname()`
-- Required X.509 certificate verification path
+- Mbed TLS 3.6.7 verified TLS 1.2 transport
+- TLS 1.2 ECDHE/ECDSA + AES-GCM only for the current modern path
+- ClientHello SNI for virtual-hosted mail endpoints
+- hostname + X.509 certificate-chain verification
 - ISRG Root X1 trust anchor
 - RSA PKCS#1 v1.5 support for certificate-chain verification only; RSA TLS key exchange remains disabled
-- Read-only certificate verification trace for peer subject/SAN diagnostics
-- Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
+- reusable `IMBMBEDTLSTransport` for encrypted connect/read/write/cancel/close behavior
+- normal Inbox IMAP flow moved off SecureTransport onto Mbed TLS
+- latest 25 message headers via `LOGIN -> SELECT INBOX -> FETCH`
+- SecureTransport and Mbed TLS diagnostics retained separately
+- non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
-The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha4` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+The full Mbed TLS gate has already passed on the physical iPad 1 against `mail.olap.com.tr:993`: TLS 1.2 handshake, SNI, hostname verification, certificate-chain verification, AES-256-GCM cipher negotiation, and Dovecot greeting all succeeded.
 
-The `0.3-alpha3` physical-device trace showed that the iPad received the hosting provider default certificate (`CN=da2.mirahosting.com`, SAN `da2.mirahosting.com`). The application was already validating against `mail.olap.com.tr`, but the minimal Mbed TLS configuration had not enabled the ClientHello SNI extension. `0.3-alpha4` enables `MBEDTLS_SSL_SERVER_NAME_INDICATION` so the virtual-hosted IMAP server can select the correct certificate without weakening any verification rule.
-
-See `TASK.md` for the exact active diagnostic gate.
+`0.4-alpha1` is the first functional build that uses that verified transport for normal Inbox loading.
 
 ## Project documents
 
-- `ARCHITECTURE.md` - stable component boundaries, constraints, trust model, and transport design
-- `DECISIONS.md` - architecture decision log and rationale
+- `ARCHITECTURE.md` - component boundaries, constraints, trust model, and transport design
+- `DECISIONS.md` - architecture decision log
 - `TASK.md` - the single active engineering task and definition of done
-- `SESSION.md` - latest development handoff, device result, commands, and resume point
+- `SESSION.md` - latest development handoff and test commands
 - `BACKLOG.md` - deferred features and future work
 
-When resuming development after a break, read `TASK.md` and `SESSION.md` first.
+When resuming development, read `TASK.md` and `SESSION.md` first.
 
 ## Build target
 
@@ -43,15 +41,15 @@ When resuming development after a break, read `TASK.md` and `SESSION.md` first.
 - SDK: iPhoneOS 6.1
 - Memory management: non-ARC
 
-## One-time TLS bootstrap
+## Mbed TLS bootstrap
 
-The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstrap them once after cloning/pulling, and rerun bootstrap after changes to `Config/IMBMBEDTLSConfig.h`:
+Mbed TLS sources and the current trust anchor are bootstrapped locally:
 
 ```bash
 make bootstrap
 ```
 
-This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific TLS configuration, and downloads ISRG Root X1 from Let's Encrypt.
+This pins Mbed TLS to `mbedtls-3.6.7`, installs the project configuration, and downloads ISRG Root X1.
 
 ## Build
 
@@ -61,30 +59,40 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-Expected package for this milestone:
+Expected package:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha4_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
 ```
+
+## Normal Inbox transport
+
+`IMBIMAPClient` performs its protocol work on a background thread and delegates encrypted network I/O to `IMBMBEDTLSTransport`.
+
+Current flow:
+
+```text
+verified TLS connect
+-> Dovecot greeting
+-> LOGIN
+-> SELECT INBOX
+-> read EXISTS
+-> FETCH latest 25 headers
+-> LOGOUT
+```
+
+Current safety bounds:
+
+- 20-second command deadline
+- 512 KB maximum accumulated IMAP response
+- generation-token cancellation so stale refresh results are ignored
+- active socket shutdown on cancel
 
 ## TLS diagnostics
 
-Open an account and tap `TLS` in the Inbox toolbar. The diagnostics view first prints the iOS 5 SecureTransport cipher list and then runs the Mbed TLS probe on a background thread. When the modern probe finishes, the view scrolls to its result automatically.
+The `TLS` button remains available. It shows the legacy iOS 5 SecureTransport cipher set and the independent Mbed TLS probe used during bring-up.
 
-The modern probe reports:
-
-- RNG initialization
-- CA trust-anchor loading
-- TCP connection
-- ClientHello SNI compile status
-- SNI / hostname setup
-- TLS handshake result
-- certificate verification depth/flags
-- peer certificate information as parsed by Mbed TLS, including SAN data
-- negotiated TLS version and cipher when the handshake succeeds
-- first Dovecot IMAP greeting line after full verification succeeds
-
-No certificate-verification bypass is used.
+Diagnostics do not bypass certificate or hostname verification.
 
 ## Planned suite integration
 
@@ -100,4 +108,4 @@ Default future attachment storage root:
 
 ## Security
 
-Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path requires X.509 verification, hostname checking, and SNI for virtual-hosted endpoints.
+Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials remain in Keychain. The modern TLS path requires certificate-chain verification, hostname verification, SNI for virtual-hosted endpoints, and the configured TLS 1.2 ECDHE-ECDSA AES-GCM suites.
