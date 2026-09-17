@@ -16,10 +16,10 @@ Confirmed:
 - The iOS 5 `clock_gettime()` incompatibility is handled through `IMBMBEDTLSPlatform.c` and `mach_absolute_time()`.
 - The Mbed TLS probe runs on the physical iPad.
 - RNG initialization succeeds.
-- SecureTransport diagnostics confirmed that iOS 5.1.1 does not support the server's required ECDHE-ECDSA AES-GCM suites.
-- Certificate verification has not been disabled.
+- SecureTransport cannot negotiate the server's required ECDHE-ECDSA AES-GCM suites.
+- Certificate and hostname verification remain mandatory.
 
-Previous Mbed TLS probe failure:
+Previous probe failure:
 
 ```text
 RNG seed: OK
@@ -28,27 +28,29 @@ X509 - Signature algorithm (oid) is unsupported
 OID - OID is not found
 ```
 
-That failure occurred while parsing ISRG Root X1, which is an RSA 4096 root. The server's current ECDSA certificate hierarchy can instead terminate at ISRG Root X2, an ECDSA P-384 root.
+The failure occurred while parsing the bundled ISRG Root X1 certificate before TCP/TLS handshake.
 
 ## Current implementation change
 
-`0.3-alpha2` changes the trust anchor to **ISRG Root X2** and enables the minimum RSA PKCS#1 v1.5 signature support needed to recognise RSA-signed cross-certificates that may still appear in the server-provided chain.
+`0.3-alpha2` keeps **ISRG Root X1** as the trust anchor and adds the minimum RSA PKCS#1 v1.5 X.509 capability needed to parse and validate the current Let's Encrypt chain.
+
+The root uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised from the earlier ECC-only 48-byte limit to 512 bytes.
 
 Important distinction:
 
 - TLS key exchange remains **ECDHE-ECDSA only**.
 - Allowed TLS ciphers remain **AES-GCM ECDHE-ECDSA only**.
-- RSA support is present only for X.509 certificate-signature compatibility.
+- RSA support is for X.509 certificate signatures/trust-chain validation, not RSA key exchange.
 - Certificate and hostname verification remain mandatory.
 
 ## Next actions
 
 1. Pull `0.3-alpha2`.
-2. Run `make bootstrap` so the new Mbed TLS config is copied and ISRG Root X2 is downloaded.
+2. Run `make bootstrap` so the updated Mbed TLS config is installed.
 3. Rebuild and install on the physical iPad.
 4. Run the Mbed TLS probe.
 5. Require all of the following before integrating with `IMBIMAPClient`:
-   - CA trust anchor loads
+   - ISRG Root X1 loads
    - TCP connect succeeds
    - TLS handshake succeeds
    - negotiated protocol is TLS 1.2
@@ -62,19 +64,17 @@ Important distinction:
 
 - Do not disable certificate verification.
 - Do not accept all roots/certificates.
-- Do not re-enable obsolete TLS versions to make the server compatible.
-- Do not weaken the mail server cipher configuration for the iPad.
+- Do not re-enable obsolete TLS versions.
+- Do not weaken the mail server cipher configuration.
 - Do not enable RSA key-exchange suites.
 - Do not store credentials outside Keychain.
 - Do not mix SMTP work into this task until IMAP transport is stable.
 
 ## Definition of done
 
-The task is complete when the physical iPad can display a diagnostic result equivalent to:
-
 ```text
 RNG seed: OK
-CA trust anchor: ISRG Root X2 loaded
+CA trust anchor: ISRG Root X1 loaded
 TCP connect: OK
 SNI/hostname: mail.olap.com.tr
 TLS handshake: OK
