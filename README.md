@@ -2,7 +2,7 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## Current milestone: v0.3-alpha3
+## Current milestone: v0.3-alpha4
 
 - Native Objective-C / UIKit split-view UI
 - Account metadata storage + Keychain-backed password storage
@@ -10,16 +10,17 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - SecureTransport diagnostics for the iPad's real cipher capabilities
 - Mbed TLS 3.6.7 modern TLS 1.2 handshake probe
 - TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
-- Server hostname/SNI validation path
+- Client-side SNI (`server_name`) support for virtual-hosted mail endpoints
+- Server hostname validation through `mbedtls_ssl_set_hostname()`
 - Required X.509 certificate verification path
 - ISRG Root X1 trust anchor
 - RSA PKCS#1 v1.5 support for certificate-chain verification only; RSA TLS key exchange remains disabled
 - Read-only certificate verification trace for peer subject/SAN diagnostics
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
-The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha3` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
+The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha4` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
 
-The latest physical-device gate is hostname verification: `0.3-alpha2` successfully loaded ISRG Root X1 and connected over TCP, then Mbed TLS reported `MBEDTLS_X509_BADCERT_CN_MISMATCH`. `0.3-alpha3` records the exact peer certificate/SAN data seen by Mbed TLS without modifying verification flags.
+The `0.3-alpha3` physical-device trace showed that the iPad received the hosting provider default certificate (`CN=da2.mirahosting.com`, SAN `da2.mirahosting.com`). The application was already validating against `mail.olap.com.tr`, but the minimal Mbed TLS configuration had not enabled the ClientHello SNI extension. `0.3-alpha4` enables `MBEDTLS_SSL_SERVER_NAME_INDICATION` so the virtual-hosted IMAP server can select the correct certificate without weakening any verification rule.
 
 See `TASK.md` for the exact active diagnostic gate.
 
@@ -63,7 +64,7 @@ make package FINALPACKAGE=1
 Expected package for this milestone:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.3-alpha3_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.3-alpha4_iphoneos-arm.deb
 ```
 
 ## TLS diagnostics
@@ -75,6 +76,7 @@ The modern probe reports:
 - RNG initialization
 - CA trust-anchor loading
 - TCP connection
+- ClientHello SNI compile status
 - SNI / hostname setup
 - TLS handshake result
 - certificate verification depth/flags
@@ -98,4 +100,4 @@ Default future attachment storage root:
 
 ## Security
 
-Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path requires X.509 verification and hostname/SNI checking.
+Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials are stored in Keychain; non-secret account metadata may be persisted separately. The modern TLS path requires X.509 verification, hostname checking, and SNI for virtual-hosted endpoints.
