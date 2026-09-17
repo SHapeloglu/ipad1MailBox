@@ -27,7 +27,7 @@ iPad1MailBox_FILES = \
 	Classes/IMBMBEDTLSPlatform.c \
 	$(MBEDTLS_SOURCES)
 
-iPad1MailBox_FRAMEWORKS = UIKit Foundation CoreFoundation Security CFNetwork
+iPad1MailBox_FRAMEWORKS = UIKit Foundation CoreFoundation CoreGraphics Security CFNetwork
 iPad1MailBox_CFLAGS = -fno-objc-arc -Wall -I$(MBEDTLS_DIR)/include -I$(MBEDTLS_DIR)/library
 iPad1MailBox_RESOURCE_DIRS = Resources
 iPad1MailBox_INSTALL_PATH = /Applications
