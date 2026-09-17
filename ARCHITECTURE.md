@@ -41,27 +41,40 @@ iPad1MailBox is a lightweight mail client for the original iPad. The project fav
 
 ### IMAP protocol
 
-`IMBIMAPClient` currently implements the minimum IMAP flow required for the first mailbox milestone:
+`IMBIMAPClient` owns the minimum IMAP state flow required for the current mailbox milestone:
 
-1. connect
+1. connect through the transport
 2. wait for server greeting
 3. `LOGIN`
 4. `SELECT INBOX`
 5. read `EXISTS`
-6. fetch the latest message headers in a bounded page
+6. fetch the latest 25 message headers
+7. close cleanly
 
-The current implementation uses the legacy CFStream/SecureTransport path. That path is retained while the replacement TLS transport is validated, but it is not expected to remain the primary TLS implementation for modern servers.
+Starting with `0.4-alpha1`, normal IMAP operation no longer uses CFStream/SecureTransport. It executes on a background thread and delegates encrypted network I/O to `IMBMBEDTLSTransport`.
+
+The IMAP parser remains separate from TLS so SMTP can later reuse the same transport without duplicating cryptographic/network code.
 
 ### TLS transport
 
-Two TLS paths currently exist for different purposes.
+#### `IMBMBEDTLSTransport`
 
-#### Apple SecureTransport
+Reusable verified TLS transport for normal mail traffic.
 
-- used by the original IMAP transport
-- exposed through `IMBTLSDiagnostics` for device cipher inspection
-- confirmed on iOS 5.1.1 to lack the modern ECDHE-ECDSA AES-GCM suites required by the current test server
-- must not be weakened by disabling certificate validation
+Responsibilities:
+
+- TCP connect
+- Mbed TLS context/RNG/trust-anchor setup
+- TLS 1.2 handshake
+- ClientHello SNI
+- hostname verification
+- X.509 chain verification
+- encrypted read/write
+- bounded timeouts
+- cancellation by shutting down the active socket
+- clean close
+
+The transport does not know about IMAP commands, usernames, passwords, mailboxes, MIME, or SMTP semantics.
 
 #### Mbed TLS 3.6.7
 
@@ -69,31 +82,43 @@ Two TLS paths currently exist for different purposes.
 - configured by `Config/IMBMBEDTLSConfig.h`
 - bootstrapped by `scripts/bootstrap_mbedtls.sh`
 - iOS 5 monotonic time supplied by `Classes/IMBMBEDTLSPlatform.c`
-- probed by `IMBModernTLSProbe`
-- target capability: TLS 1.2, ECDHE-ECDSA, AES-GCM, SNI, X.509 verification
+- TLS 1.2 only for the current modern transport
+- approved suites limited to ECDHE-ECDSA + AES-GCM
+- RSA enabled only for X.509 chain-signature verification
+- ClientHello SNI enabled explicitly
 
-The Mbed TLS probe is intentionally separate from `IMBIMAPClient` until TCP, handshake, certificate verification, and IMAP greeting all pass on the physical iPad. After that gate passes, `IMBIMAPClient` will be moved onto the modern TLS transport.
+The modern TLS path has been proven on the physical iPad 1 against `mail.olap.com.tr:993` with full certificate/hostname verification and a Dovecot greeting.
+
+#### Diagnostics
+
+- `IMBTLSDiagnostics` remains for observing the legacy iOS 5 SecureTransport cipher set.
+- `IMBModernTLSProbe` remains as a physical-device Mbed TLS diagnostic while transport integration stabilizes.
+
+SecureTransport is no longer the intended normal IMAP transport for modern servers.
 
 ## Trust model
 
-The application must authenticate the server hostname and certificate chain.
+The application authenticates the server hostname and certificate chain. The current bootstrap includes ISRG Root X1 in `Resources` for the validated test server chain.
 
-Current test trust bootstrap includes an ISRG root certificate in `Resources`. Trust anchors may be expanded when required by real certificate chains, but unknown or unsupported signature algorithms must be fixed by enabling the necessary cryptographic/X.509 support rather than bypassing verification.
+Trust anchors can be expanded for additional providers, but unsupported chains must be solved by adding the required trusted roots/algorithms rather than bypassing verification.
 
-## Memory policy
+## Concurrency and cancellation
 
-- page message headers; initial target is approximately 25 messages
-- fetch full body only when a message is opened
-- fetch attachments only on explicit user action
-- release body and attachment buffers aggressively
-- keep TLS buffers deliberately bounded for the 256 MB device
-- avoid heavyweight HTML/MIME processing until plain-text and transport stability are proven
+`IMBIMAPClient` performs a fetch operation on a background thread. Each operation receives a generation token. Refresh/cancel increments the generation and cancels the currently active transport.
+
+A stale worker result is discarded on the main thread. The active Mbed TLS socket is shut down on cancellation so a blocked read can unwind quickly.
+
+## Memory and response limits
+
+- initial Inbox page: latest 25 messages
+- IMAP command timeout: 20 seconds
+- maximum accumulated IMAP response for this milestone: 512 KB
+- Mbed TLS record buffers remain bounded in project configuration
+- full bodies/attachments are not fetched during Inbox listing
 
 ## Suite ownership and hand-off
 
-`iPad1MailBox` owns accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off.
-
-It must not become a general file manager.
+`iPad1MailBox` owns accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off. It must not become a general file manager.
 
 Planned hand-off targets:
 
@@ -121,7 +146,7 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-## Milestone direction
+## Milestones
 
 ### v0.1
 
@@ -129,18 +154,22 @@ Application shell, split view, account setup, Keychain, compose shell.
 
 ### v0.2
 
-Minimal IMAP client, Inbox headers, connection diagnostics, SecureTransport capability investigation.
+Minimal IMAP parser, Inbox headers, connection diagnostics, SecureTransport capability investigation.
 
 ### v0.3
 
-Modern TLS transport validation on physical iPad, then migration of IMAP onto Mbed TLS.
+Modern Mbed TLS transport validation on the physical iPad.
+
+### v0.4
+
+Reusable verified Mbed TLS transport and migration of normal IMAP header loading away from SecureTransport.
 
 ### After transport stability
 
 - full message body loading
 - RFC 2047 header decoding
 - MIME parsing
-- SMTP send
+- SMTP send using the reusable transport
 - reply/forward
 - Sent/Drafts/Trash
 - flags
