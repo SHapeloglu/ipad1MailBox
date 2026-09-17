@@ -90,15 +90,15 @@
     }
     [report appendString:@"RNG seed: OK\n"];
 
-    NSString *caPath = [[NSBundle mainBundle] pathForResource:@"isrgrootx1" ofType:@"pem"];
+    NSString *caPath = [[NSBundle mainBundle] pathForResource:@"isrgrootx2" ofType:@"pem"];
     if ([caPath length] == 0) {
-        [report appendString:@"CA trust anchor: FAILED\nResources/isrgrootx1.pem is missing.\n"];
+        [report appendString:@"CA trust anchor: FAILED\nResources/isrgrootx2.pem is missing.\n"];
         goto cleanup;
     }
 
     NSData *caData = [NSData dataWithContentsOfFile:caPath];
     if ([caData length] == 0) {
-        [report appendString:@"CA trust anchor: FAILED\nUnable to read ISRG Root X1.\n"];
+        [report appendString:@"CA trust anchor: FAILED\nUnable to read ISRG Root X2.\n"];
         goto cleanup;
     }
 
@@ -115,7 +115,7 @@
         [report appendFormat:@"CA trust anchor: FAILED\n%@\n", [self errorTextForCode:ret]];
         goto cleanup;
     }
-    [report appendString:@"CA trust anchor: ISRG Root X1 loaded\n"];
+    [report appendString:@"CA trust anchor: ISRG Root X2 loaded\n"];
 
     char portText[16];
     snprintf(portText, sizeof(portText), "%lu", (unsigned long)port);
