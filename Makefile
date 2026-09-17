@@ -17,6 +17,7 @@ iPad1MailBox_FILES = \
 	Classes/IMBInboxViewController.m \
 	Classes/IMBComposeViewController.m \
 	Classes/IMBIMAPClient.m \
+	Classes/IMBMBEDTLSTransport.m \
 	Classes/IMBMessageListViewController.m \
 	Classes/IMBTLSDiagnostics.m \
 	Classes/IMBModernTLSProbe.m \
