@@ -8,61 +8,76 @@ Establish a fully verified TLS 1.2 IMAP connection from the physical iPad 1 to `
 
 ## Current state
 
-The physical iPad is running `iPad1MailBox 0.3-alpha1`. The next build is `0.3-alpha2`.
+The physical iPad has now tested `iPad1MailBox 0.3-alpha2`. The next diagnostic build is `0.3-alpha3`.
 
-Confirmed:
+Confirmed on the physical device:
 
 - Mbed TLS 3.6.7 builds for armv7 with the iPhoneOS 6.1 SDK.
 - The iOS 5 `clock_gettime()` incompatibility is handled through `IMBMBEDTLSPlatform.c` and `mach_absolute_time()`.
-- The Mbed TLS probe runs on the physical iPad.
 - RNG initialization succeeds.
-- SecureTransport cannot negotiate the server's required ECDHE-ECDSA AES-GCM suites.
+- ISRG Root X1 now parses successfully.
+- TCP connection to `mail.olap.com.tr:993` succeeds.
+- SNI/hostname is configured as `mail.olap.com.tr`.
 - Certificate and hostname verification remain mandatory.
+- SecureTransport remains unable to negotiate the server's required modern ECDHE-ECDSA AES-GCM suites.
 
-Previous probe failure:
+Latest `0.3-alpha2` probe result:
 
 ```text
 RNG seed: OK
-CA trust anchor: FAILED
-X509 - Signature algorithm (oid) is unsupported
-OID - OID is not found
+CA trust anchor: ISRG Root X1 loaded
+TCP connect: OK
+SNI/hostname: mail.olap.com.tr
+TLS handshake: FAILED
+X509 - Certificate verification failed, e.g. CRL, CA or signature check failed (-9984 / -0x2700)
+Certificate verify flags: 0x00000004
+  The certificate Common Name (CN) does not match with the expected CN
 ```
 
-The failure occurred while parsing the bundled ISRG Root X1 certificate before TCP/TLS handshake.
+Mbed TLS defines verification flag `0x00000004` as `MBEDTLS_X509_BADCERT_CN_MISMATCH`.
 
-## Current implementation change
+## Current question
 
-`0.3-alpha2` keeps **ISRG Root X1** as the trust anchor and adds the minimum RSA PKCS#1 v1.5 X.509 capability needed to parse and validate the current Let's Encrypt chain.
+Earlier OpenSSL inspection indicated that the live certificate for this endpoint includes `mail.olap.com.tr` in Subject Alternative Name (SAN), while the leaf Common Name is `olap.com.tr`.
 
-The root uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised from the earlier ECC-only 48-byte limit to 512 bytes.
+Mbed TLS normally checks DNS SAN entries before falling back to CN. Therefore the current failure must be diagnosed before any verification behavior is changed.
 
-Important distinction:
+Possible explanations to distinguish:
 
-- TLS key exchange remains **ECDHE-ECDSA only**.
-- Allowed TLS ciphers remain **AES-GCM ECDHE-ECDSA only**.
-- RSA support is for X.509 certificate signatures/trust-chain validation, not RSA key exchange.
-- Certificate and hostname verification remain mandatory.
+1. The certificate currently presented to the iPad differs from the certificate previously observed with OpenSSL.
+2. The peer certificate SAN is not being parsed as expected by the current Mbed TLS build.
+3. A server/SNI or certificate-deployment detail differs on the device path.
+
+Do **not** clear or ignore the CN mismatch until the exact peer certificate seen by Mbed TLS is known.
+
+## 0.3-alpha3 diagnostic change
+
+`IMBModernTLSProbe` now installs a read-only verification callback that records:
+
+- verification depth
+- verification flags
+- the peer certificate information exactly as parsed by Mbed TLS
+- SAN information printed by Mbed TLS for the leaf certificate
+
+The callback does not change, clear, or mask any verification flag.
+
+The TLS Diagnostics view also auto-scrolls to the completed modern TLS result.
 
 ## Next actions
 
-1. Pull `0.3-alpha2`.
-2. Run `make bootstrap` so the updated Mbed TLS config is installed.
-3. Rebuild and install on the physical iPad.
-4. Run the Mbed TLS probe.
-5. Require all of the following before integrating with `IMBIMAPClient`:
-   - ISRG Root X1 loads
-   - TCP connect succeeds
-   - TLS handshake succeeds
-   - negotiated protocol is TLS 1.2
-   - negotiated cipher is an approved ECDHE-ECDSA AES-GCM suite
-   - certificate verification succeeds
-   - hostname verification succeeds
-   - Dovecot IMAP greeting is received
-6. After the gate passes, introduce a transport abstraction and move `LOGIN -> SELECT INBOX -> FETCH` onto Mbed TLS.
+1. Pull and build `0.3-alpha3`.
+2. No `make bootstrap` is required for this build because the Mbed TLS config is unchanged from `0.3-alpha2`.
+3. Install on the physical iPad.
+4. Run `Inbox -> TLS`.
+5. Capture the `Peer certificate as parsed by Mbed TLS` section, especially Subject and Subject Alternative Name.
+6. If SAN contains `mail.olap.com.tr`, fix the Mbed TLS hostname-validation integration without weakening verification.
+7. If SAN does not contain `mail.olap.com.tr`, treat it as a server certificate/deployment issue rather than bypassing hostname checks.
+8. Only after hostname verification passes, continue to cipher/protocol confirmation and the Dovecot greeting gate.
 
 ## Do not
 
 - Do not disable certificate verification.
+- Do not clear `MBEDTLS_X509_BADCERT_CN_MISMATCH` merely to make the handshake pass.
 - Do not accept all roots/certificates.
 - Do not re-enable obsolete TLS versions.
 - Do not weaken the mail server cipher configuration.
