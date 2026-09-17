@@ -8,76 +8,97 @@ Establish a fully verified TLS 1.2 IMAP connection from the physical iPad 1 to `
 
 ## Current state
 
-The physical iPad has now tested `iPad1MailBox 0.3-alpha2`. The next diagnostic build is `0.3-alpha3`.
+The physical iPad has now tested `iPad1MailBox 0.3-alpha3`. The next build is `0.3-alpha4`.
 
 Confirmed on the physical device:
 
 - Mbed TLS 3.6.7 builds for armv7 with the iPhoneOS 6.1 SDK.
-- The iOS 5 `clock_gettime()` incompatibility is handled through `IMBMBEDTLSPlatform.c` and `mach_absolute_time()`.
 - RNG initialization succeeds.
-- ISRG Root X1 now parses successfully.
+- ISRG Root X1 parses successfully.
 - TCP connection to `mail.olap.com.tr:993` succeeds.
-- SNI/hostname is configured as `mail.olap.com.tr`.
+- Certificate-chain verification for depths 1-4 reports no flags.
+- The only failure in `0.3-alpha3` is hostname mismatch at leaf depth 0.
 - Certificate and hostname verification remain mandatory.
-- SecureTransport remains unable to negotiate the server's required modern ECDHE-ECDSA AES-GCM suites.
 
-Latest `0.3-alpha2` probe result:
+## Root cause identified from 0.3-alpha3
+
+The leaf certificate actually received by Mbed TLS on the iPad is the hosting provider default certificate, not the certificate previously observed with OpenSSL when SNI was sent.
+
+Physical-device trace:
 
 ```text
-RNG seed: OK
-CA trust anchor: ISRG Root X1 loaded
-TCP connect: OK
-SNI/hostname: mail.olap.com.tr
-TLS handshake: FAILED
-X509 - Certificate verification failed, e.g. CRL, CA or signature check failed (-9984 / -0x2700)
-Certificate verify flags: 0x00000004
-  The certificate Common Name (CN) does not match with the expected CN
+Verify callback: depth=4 flags=0x00000000
+Verify callback: depth=3 flags=0x00000000
+Verify callback: depth=2 flags=0x00000000
+Verify callback: depth=1 flags=0x00000000
+Verify callback: depth=0 flags=0x00000004
+
+Peer certificate as parsed by Mbed TLS:
+  subject name  : CN=da2.mirahosting.com
+  subject alt name:
+      dNSName : da2.mirahosting.com
 ```
 
-Mbed TLS defines verification flag `0x00000004` as `MBEDTLS_X509_BADCERT_CN_MISMATCH`.
+This explains `MBEDTLS_X509_BADCERT_CN_MISMATCH`: the received certificate genuinely does not contain `mail.olap.com.tr`.
 
-## Current question
+The application already called:
 
-Earlier OpenSSL inspection indicated that the live certificate for this endpoint includes `mail.olap.com.tr` in Subject Alternative Name (SAN), while the leaf Common Name is `olap.com.tr`.
+```text
+mbedtls_ssl_set_hostname(..., "mail.olap.com.tr")
+```
 
-Mbed TLS normally checks DNS SAN entries before falling back to CN. Therefore the current failure must be diagnosed before any verification behavior is changed.
+but the project configuration did not define:
 
-Possible explanations to distinguish:
+```text
+MBEDTLS_SSL_SERVER_NAME_INDICATION
+```
 
-1. The certificate currently presented to the iPad differs from the certificate previously observed with OpenSSL.
-2. The peer certificate SAN is not being parsed as expected by the current Mbed TLS build.
-3. A server/SNI or certificate-deployment detail differs on the device path.
+In Mbed TLS 3.6.7, the TLS ClientHello `server_name` extension is emitted only when `MBEDTLS_SSL_SERVER_NAME_INDICATION` is enabled. Therefore hostname verification was configured, but SNI was not actually transmitted to the virtual-hosted mail server. The server consequently returned its default `da2.mirahosting.com` certificate.
 
-Do **not** clear or ignore the CN mismatch until the exact peer certificate seen by Mbed TLS is known.
+## 0.3-alpha4 change
 
-## 0.3-alpha3 diagnostic change
+Enable:
 
-`IMBModernTLSProbe` now installs a read-only verification callback that records:
+```text
+MBEDTLS_SSL_SERVER_NAME_INDICATION
+```
 
-- verification depth
-- verification flags
-- the peer certificate information exactly as parsed by Mbed TLS
-- SAN information printed by Mbed TLS for the leaf certificate
+Keep:
 
-The callback does not change, clear, or mask any verification flag.
+- `MBEDTLS_SSL_VERIFY_REQUIRED`
+- hostname verification through `mbedtls_ssl_set_hostname()`
+- ECDHE-ECDSA + AES-GCM only
+- ISRG Root X1 trust anchor
+- RSA only for X.509 chain verification, not RSA key exchange
 
-The TLS Diagnostics view also auto-scrolls to the completed modern TLS result.
+The TLS probe now explicitly reports whether ClientHello SNI support is compiled in:
+
+```text
+SNI ClientHello extension: ENABLED
+```
 
 ## Next actions
 
-1. Pull and build `0.3-alpha3`.
-2. No `make bootstrap` is required for this build because the Mbed TLS config is unchanged from `0.3-alpha2`.
-3. Install on the physical iPad.
+1. Pull `0.3-alpha4`.
+2. Run `make bootstrap` because `Config/IMBMBEDTLSConfig.h` changed.
+3. Rebuild and install on the physical iPad.
 4. Run `Inbox -> TLS`.
-5. Capture the `Peer certificate as parsed by Mbed TLS` section, especially Subject and Subject Alternative Name.
-6. If SAN contains `mail.olap.com.tr`, fix the Mbed TLS hostname-validation integration without weakening verification.
-7. If SAN does not contain `mail.olap.com.tr`, treat it as a server certificate/deployment issue rather than bypassing hostname checks.
-8. Only after hostname verification passes, continue to cipher/protocol confirmation and the Dovecot greeting gate.
+5. Confirm:
+   - `SNI ClientHello extension: ENABLED`
+   - leaf certificate is for `olap.com.tr` / includes `mail.olap.com.tr` SAN
+   - all verification depths have zero flags
+   - TLS handshake succeeds
+   - protocol is TLS 1.2
+   - cipher is an approved ECDHE-ECDSA AES-GCM suite
+   - certificate verification succeeds
+   - Dovecot greeting is received
+6. Only after that gate passes, move `LOGIN -> SELECT INBOX -> FETCH` onto the Mbed TLS transport.
 
 ## Do not
 
 - Do not disable certificate verification.
-- Do not clear `MBEDTLS_X509_BADCERT_CN_MISMATCH` merely to make the handshake pass.
+- Do not clear `MBEDTLS_X509_BADCERT_CN_MISMATCH`.
+- Do not accept the provider default certificate.
 - Do not accept all roots/certificates.
 - Do not re-enable obsolete TLS versions.
 - Do not weaken the mail server cipher configuration.
@@ -91,6 +112,7 @@ The TLS Diagnostics view also auto-scrolls to the completed modern TLS result.
 RNG seed: OK
 CA trust anchor: ISRG Root X1 loaded
 TCP connect: OK
+SNI ClientHello extension: ENABLED
 SNI/hostname: mail.olap.com.tr
 TLS handshake: OK
 Protocol: TLSv1.2
