@@ -2,7 +2,7 @@
 
 iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
 
-## Current milestone: v0.4-alpha1
+## Current milestone: v0.4-alpha2
 
 - Native Objective-C / UIKit split-view UI
 - Account metadata storage + Keychain-backed password storage
@@ -10,17 +10,15 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - TLS 1.2 ECDHE/ECDSA + AES-GCM only for the current modern path
 - ClientHello SNI for virtual-hosted mail endpoints
 - hostname + X.509 certificate-chain verification
-- ISRG Root X1 trust anchor
-- RSA PKCS#1 v1.5 support for certificate-chain verification only; RSA TLS key exchange remains disabled
 - reusable `IMBMBEDTLSTransport` for encrypted connect/read/write/cancel/close behavior
 - normal Inbox IMAP flow moved off SecureTransport onto Mbed TLS
 - latest 25 message headers via `LOGIN -> SELECT INBOX -> FETCH`
+- RFC 2047 Subject/From decoding for Q and Base64 encoded words
+- UTF-8 and legacy IANA charset conversion through CoreFoundation, including Turkish ISO-8859-9 when available
 - SecureTransport and Mbed TLS diagnostics retained separately
 - non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
-The full Mbed TLS gate has already passed on the physical iPad 1 against `mail.olap.com.tr:993`: TLS 1.2 handshake, SNI, hostname verification, certificate-chain verification, AES-256-GCM cipher negotiation, and Dovecot greeting all succeeded.
-
-`0.4-alpha1` is the first functional build that uses that verified transport for normal Inbox loading.
+`0.4-alpha1` was physically verified on the original iPad: the real Inbox loaded successfully over the reusable Mbed TLS transport, removing the old normal-operation `OSStatus -9844` blocker. `0.4-alpha2` focuses on making real-world encoded Subject and From headers readable.
 
 ## Project documents
 
@@ -53,6 +51,8 @@ This pins Mbed TLS to `mbedtls-3.6.7`, installs the project configuration, and d
 
 ## Build
 
+No Mbed TLS config changed between `0.4-alpha1` and `0.4-alpha2`, so an already-working local vendor tree does not require another bootstrap.
+
 ```bash
 find . -type f -exec touch {} +
 make clean
@@ -62,7 +62,7 @@ make package FINALPACKAGE=1
 Expected package:
 
 ```text
-packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
 ```
 
 ## Normal Inbox transport
@@ -88,11 +88,21 @@ Current safety bounds:
 - generation-token cancellation so stale refresh results are ignored
 - active socket shutdown on cancel
 
+## RFC 2047 header decoding
+
+`IMBRFC2047Decoder` handles common encoded-word forms used by real mail headers:
+
+```text
+=?UTF-8?Q?Yeni_Oturum_Kayd=C4=B1?=
+=?UTF-8?B?...?=
+=?iso-8859-9?Q?...?=
+```
+
+The decoder supports adjacent encoded words and preserves malformed/unsupported content instead of dropping it. It uses a small custom Base64 decoder rather than newer NSData APIs unavailable on iOS 5.1.1.
+
 ## TLS diagnostics
 
-The `TLS` button remains available. It shows the legacy iOS 5 SecureTransport cipher set and the independent Mbed TLS probe used during bring-up.
-
-Diagnostics do not bypass certificate or hostname verification.
+The `TLS` button remains available. It shows the legacy iOS 5 SecureTransport cipher set and the independent Mbed TLS probe used during bring-up. Normal Inbox loading no longer depends on SecureTransport.
 
 ## Planned suite integration
 
