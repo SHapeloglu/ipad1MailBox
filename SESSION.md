@@ -4,12 +4,18 @@ _Last updated: 2026-09-17_
 
 ## Where we are
 
-The modern TLS bring-up phase is complete on the physical iPad 1. `iPad1MailBox 0.3-alpha4` successfully established and verified a TLS 1.2 IMAPS connection to the production-style endpoint.
+The modern TLS bring-up phase is complete on the physical iPad 1. `0.3-alpha4` proved the full verified TLS 1.2 path. The repository has now advanced to the first normal Inbox build using a reusable Mbed TLS transport.
 
-Latest tested build:
+Latest proven device build:
 
 ```text
 iPad1MailBox 0.3-alpha4
+```
+
+Next functional test build:
+
+```text
+iPad1MailBox 0.4-alpha1
 ```
 
 Target server:
@@ -19,43 +25,7 @@ mail.olap.com.tr:993
 implicit TLS / IMAPS
 ```
 
-## What is now proven on the physical iPad
-
-### Keychain
-
-The earlier `errSecInteractionNotAllowed (-25308)` issue was fixed with application identifier and keychain access group entitlements. Keychain storage works.
-
-### SecureTransport limitation
-
-The physical iPad's iOS 5.1.1 SecureTransport cannot negotiate the modern ECDHE-ECDSA AES-GCM suites required by the server. Older CBC suites supported by the device are rejected by the server.
-
-### Mbed TLS 3.6.7
-
-Mbed TLS compiles into the armv7 application with the iPhoneOS 6.1 SDK. iOS 5 timer compatibility is provided through `MBEDTLS_PLATFORM_MS_TIME_ALT`, `MBEDTLS_PLATFORM_C`, and `mach_absolute_time()`.
-
-### Trust chain
-
-ISRG Root X1 parses and verifies after enabling RSA PKCS#1 v1.5 certificate-signature support and raising `MBEDTLS_MPI_MAX_SIZE` to 512 for the 4096-bit root key. RSA TLS key exchange remains disabled.
-
-### SNI / hostname
-
-`0.3-alpha3` showed that without `MBEDTLS_SSL_SERVER_NAME_INDICATION`, the server returned its default `da2.mirahosting.com` certificate. `0.3-alpha4` enabled ClientHello SNI and retained `mbedtls_ssl_set_hostname()` for hostname verification.
-
-The server then presented the expected certificate:
-
-```text
-subject name: CN=olap.com.tr
-subject alt name includes:
-  olap.com.tr
-  pop.olap.com.tr
-  smtp.olap.com.tr
-  mail.olap.com.tr
-  www.olap.com.tr
-```
-
-All verification depths now report zero flags.
-
-## Successful 0.3-alpha4 device result
+## Proven on the physical iPad
 
 ```text
 RNG seed: OK
@@ -63,44 +33,128 @@ CA trust anchor: ISRG Root X1 loaded
 TCP connect: OK
 SNI ClientHello extension: ENABLED
 SNI/hostname: mail.olap.com.tr
-Verify callback: depth=4 flags=0x00000000
-Verify callback: depth=3 flags=0x00000000
-Verify callback: depth=2 flags=0x00000000
-Verify callback: depth=1 flags=0x00000000
-Verify callback: depth=0 flags=0x00000000
+certificate verification depths 0-4: flags=0
 TLS handshake: OK
 Protocol: TLSv1.2
 Cipher: TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384
 Certificate verification: OK
-IMAP greeting: * OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ AUTH=PLAIN] Dovecot DA ready.
+IMAP greeting: * OK ... Dovecot DA ready.
 ```
 
-This completes the TLS validation gate defined for `IMBModernTLSProbe`.
+The earlier Keychain entitlement issue, iOS 5 `clock_gettime()` incompatibility, RSA/X.509 trust-anchor support, and ClientHello SNI problem are all resolved.
 
-## Next engineering step
+## 0.4-alpha1 changes prepared
 
-Move the existing minimal IMAP flow from SecureTransport to a reusable Mbed TLS transport:
+### New reusable transport
+
+Files:
 
 ```text
-connect/TLS
--> greeting
--> LOGIN
--> SELECT INBOX
--> latest UID/header fetch
+Classes/IMBMBEDTLSTransport.h
+Classes/IMBMBEDTLSTransport.m
 ```
 
-Preserve the existing IMAP parser where practical. Do not add SMTP/MIME/attachments in the same integration step.
+Responsibilities:
+
+- Mbed TLS context lifecycle
+- RNG + ISRG Root X1 trust setup
+- TCP connect
+- TLS 1.2 handshake
+- SNI and hostname verification
+- mandatory X.509 verification
+- encrypted read/write
+- timeout handling
+- cancellation through socket shutdown
+- clean TLS close
+
+### IMAP migration
+
+`IMBIMAPClient` no longer uses `NSInputStream` / `NSOutputStream` / CFStream SecureTransport for normal Inbox loading.
+
+The protocol flow now executes on a background thread through `IMBMBEDTLSTransport`:
+
+```text
+greeting
+-> LOGIN
+-> SELECT INBOX
+-> read EXISTS
+-> FETCH latest 25 headers
+-> LOGOUT
+```
+
+Concurrency protection:
+
+- each fetch receives a generation token
+- cancel/refresh increments the token
+- active transport is cancelled
+- stale worker results are ignored
+
+Safety limits:
+
+```text
+command timeout: 20 seconds
+maximum accumulated IMAP response: 512 KB
+```
+
+Credentials are still sourced from Keychain and are never logged.
+
+## Build commands
+
+```bash
+cd ~/projects/ipad1MailBox
+git pull origin main
+make bootstrap
+find . -type f -exec touch {} +
+make clean
+make package FINALPACKAGE=1
+```
+
+Expected package:
+
+```text
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
+```
+
+Copy:
+
+```bash
+scp -o HostKeyAlgorithms=+ssh-rsa \
+-o PubkeyAcceptedAlgorithms=+ssh-rsa \
+packages/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb \
+root@192.168.1.100:/var/mobile/
+```
+
+Install:
+
+```bash
+dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.4-alpha1_iphoneos-arm.deb
+su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
+killall SpringBoard
+```
+
+Verify:
+
+```bash
+dpkg -s com.shapeloglu.ipad1mailbox | grep Version
+```
+
+## What to test next
+
+1. Open `info@olap.com.tr`.
+2. Inbox should connect without `OSStatus -9844`.
+3. Up to 25 latest headers should appear.
+4. Tap refresh once and confirm the list reloads correctly.
+5. Keep the `TLS` diagnostics button for comparison; normal Inbox should no longer depend on SecureTransport.
 
 ## Important code locations
 
-- `Classes/IMBIMAPClient.m` - current legacy IMAP command/parser flow
-- `Classes/IMBTLSDiagnostics.m` - SecureTransport diagnostics
-- `Classes/IMBModernTLSProbe.m` - proven Mbed TLS device probe
-- `Classes/IMBMBEDTLSPlatform.c` - iOS 5 timer compatibility
-- `Config/IMBMBEDTLSConfig.h` - Mbed TLS feature set including ClientHello SNI
-- `scripts/bootstrap_mbedtls.sh` - Mbed TLS + ISRG Root X1 bootstrap
-- `Makefile` - armv7 build
+- `Classes/IMBMBEDTLSTransport.m` - reusable verified TLS transport
+- `Classes/IMBIMAPClient.m` - background IMAP command/parser flow
+- `Classes/IMBModernTLSProbe.m` - proven diagnostic path
+- `Classes/IMBTLSDiagnostics.m` - legacy SecureTransport capability diagnostics
+- `Config/IMBMBEDTLSConfig.h` - Mbed TLS feature/cipher configuration
+- `TASK.md` - active physical-device test gate
 
 ## Resume here
 
-Read `TASK.md` first. The active task is no longer TLS diagnosis; it is Mbed TLS IMAP transport integration. The physical TLS gate has passed, so normal Inbox traffic can now be moved off SecureTransport.
+Build `0.4-alpha1`. If it compiles, install and test normal Inbox loading plus one refresh. Do not begin body/MIME/SMTP work until those two operations pass on the physical iPad.
