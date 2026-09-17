@@ -11,9 +11,9 @@ iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv
 - Mbed TLS 3.6.7 modern TLS 1.2 handshake probe
 - TLS 1.2 ECDHE/ECDSA + AES-GCM support independent of the iOS 5 SecureTransport cipher set
 - Server hostname/SNI validation path
-- Required X.509 certificate verification path using bundled trust anchors
-- ISRG Root X2 (ECDSA P-384) trust anchor for the current Let's Encrypt ECDSA hierarchy
-- Minimal RSA PKCS#1 v1.5 certificate-signature support for cross-signed CA compatibility; RSA TLS key exchange remains disabled
+- Required X.509 certificate verification path
+- ISRG Root X1 trust anchor
+- RSA PKCS#1 v1.5 support for certificate-chain verification only; RSA TLS key exchange remains disabled
 - Non-ARC and Theos/iPhoneOS 6.1 SDK compatible
 
 The existing CFNetwork/SecureTransport IMAP path is still present for comparison. `v0.3-alpha2` continues validating the modern TLS transport on the physical iPad before the full IMAP state machine is moved onto it.
@@ -47,7 +47,7 @@ The Mbed TLS source and CA trust anchor are intentionally not committed. Bootstr
 make bootstrap
 ```
 
-This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific low-memory TLS configuration, and downloads ISRG Root X2 from Let's Encrypt.
+This pins Mbed TLS to `mbedtls-3.6.7`, installs the project-specific TLS configuration, and downloads ISRG Root X1 from Let's Encrypt.
 
 ## Build
 
