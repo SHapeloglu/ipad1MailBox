@@ -118,3 +118,15 @@ During bring-up, the Makefile may compile a broader set of Mbed TLS library sour
 After successful end-to-end TLS/IMAP validation, replace broad wildcard inclusion with an explicit minimal source list and measure binary/RAM impact.
 
 **Reason:** Correctness and compatibility should be established before aggressive source pruning, while the final build should still respect the 256 MB target.
+
+## ADR-010 - Use ISRG Root X2 as the ECDSA trust anchor
+
+**Status:** Accepted
+
+The first Mbed TLS probe bundled ISRG Root X1. That root is RSA 4096 and the intentionally small ECC-focused configuration could not parse its RSA signature OID.
+
+The target server currently uses the Let's Encrypt ECDSA hierarchy, which can terminate at ISRG Root X2 (ECDSA P-384). The application therefore bundles ISRG Root X2 as the trust anchor for this bring-up path.
+
+The Mbed TLS build still enables minimal RSA PKCS#1 v1.5 certificate-signature support so that RSA-signed cross-certificates in a server-provided chain can be recognised. This does **not** enable RSA TLS key exchange: the configured TLS ciphers remain ECDHE-ECDSA + AES-GCM only.
+
+**Reason:** This keeps the trust store aligned with the actual ECDSA hierarchy and avoids carrying an unnecessary RSA 4096 trust-anchor key on the 256 MB target while retaining compatibility with cross-signed chain metadata.
