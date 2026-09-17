@@ -1,16 +1,10 @@
 #import "IMBIMAPClient.h"
 #import "IMBAccount.h"
-#import <CFNetwork/CFNetwork.h>
+#import "IMBMBEDTLSTransport.h"
 
 static NSString * const IMBIMAPErrorDomain = @"com.shapeloglu.ipad1mailbox.imap";
-
-enum {
-    IMBIMAPStateDisconnected = 0,
-    IMBIMAPStateWaitingGreeting,
-    IMBIMAPStateWaitingLogin,
-    IMBIMAPStateWaitingSelect,
-    IMBIMAPStateWaitingFetch
-};
+static const NSUInteger IMBIMAPMaximumResponseBytes = 512 * 1024;
+static const NSTimeInterval IMBIMAPCommandTimeout = 20.0;
 
 @implementation IMBIMAPClient
 
@@ -19,8 +13,7 @@ enum {
 - (id)init {
     self = [super init];
     if (self) {
-        _state = IMBIMAPStateDisconnected;
-        _receiveBuffer = [[NSMutableData alloc] init];
+        _generation = 1;
     }
     return self;
 }
@@ -31,90 +24,41 @@ enum {
     return [NSError errorWithDomain:IMBIMAPErrorDomain code:code userInfo:info];
 }
 
-- (void)resetTimeout {
-    [_timeoutTimer invalidate];
-    [_timeoutTimer release];
-    _timeoutTimer = [[NSTimer scheduledTimerWithTimeInterval:20.0
-                                                     target:self
-                                                   selector:@selector(timeoutFired:)
-                                                   userInfo:nil
-                                                    repeats:NO] retain];
-}
-
-- (void)timeoutFired:(NSTimer *)timer {
-    [self failWithError:[self errorWithCode:100 description:@"IMAP connection timed out after 20 seconds."]];
-}
-
-- (void)closeStreams {
-    if (_inputStream) {
-        [_inputStream setDelegate:nil];
-        [_inputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
-        [_inputStream close];
-        CFRelease((CFTypeRef)_inputStream);
-        _inputStream = nil;
+- (BOOL)isOperationCurrent:(NSUInteger)token {
+    @synchronized(self) {
+        return token == _generation;
     }
-    if (_outputStream) {
-        [_outputStream setDelegate:nil];
-        [_outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
-        [_outputStream close];
-        CFRelease((CFTypeRef)_outputStream);
-        _outputStream = nil;
+}
+
+- (void)setActiveTransport:(IMBMBEDTLSTransport *)transport forToken:(NSUInteger)token {
+    @synchronized(self) {
+        if (token != _generation) return;
+        if (_activeTransport == transport) return;
+        [_activeTransport release];
+        _activeTransport = [transport retain];
+    }
+}
+
+- (void)clearActiveTransportIfMatches:(IMBMBEDTLSTransport *)transport {
+    @synchronized(self) {
+        if (_activeTransport == transport) {
+            [_activeTransport release];
+            _activeTransport = nil;
+        }
     }
 }
 
 - (void)cancel {
-    _finished = YES;
-    [_timeoutTimer invalidate];
-    [_timeoutTimer release];
-    _timeoutTimer = nil;
-    [self closeStreams];
-    _state = IMBIMAPStateDisconnected;
-}
-
-- (void)cleanupSessionObjects {
-    [_account release];
-    _account = nil;
-    [_password release];
-    _password = nil;
-    [_receiveBuffer setLength:0];
-}
-
-- (void)failWithError:(NSError *)error {
-    if (_finished) return;
-    _finished = YES;
-    [_timeoutTimer invalidate];
-    [_timeoutTimer release];
-    _timeoutTimer = nil;
-    [self closeStreams];
-    _state = IMBIMAPStateDisconnected;
-
-    id<IMBIMAPClientDelegate> delegate = _delegate;
-    if (delegate && [delegate respondsToSelector:@selector(imapClient:didFailWithError:)]) {
-        [delegate imapClient:self didFailWithError:error];
-    }
-    [self cleanupSessionObjects];
-}
-
-- (void)finishWithMessages:(NSArray *)messages {
-    if (_finished) return;
-    _finished = YES;
-    [_timeoutTimer invalidate];
-    [_timeoutTimer release];
-    _timeoutTimer = nil;
-
-    if (_outputStream) {
-        const char *logout = "A999 LOGOUT\r\n";
-        [_outputStream write:(const uint8_t *)logout maxLength:strlen(logout)];
+    IMBMBEDTLSTransport *transport = nil;
+    @synchronized(self) {
+        _generation++;
+        transport = [_activeTransport retain];
     }
 
-    [self closeStreams];
-    _state = IMBIMAPStateDisconnected;
-
-    id<IMBIMAPClientDelegate> delegate = _delegate;
-    if (delegate && [delegate respondsToSelector:@selector(imapClient:didLoadMessages:)]) {
-        [delegate imapClient:self didLoadMessages:messages];
+    if (transport) {
+        [transport cancel];
+        [transport release];
     }
-    [self cleanupSessionObjects];
 }
 
 - (NSString *)quotedIMAPString:(NSString *)value {
@@ -127,95 +71,11 @@ enum {
     return [NSString stringWithFormat:@"\"%@\"", safe];
 }
 
-- (BOOL)sendCommand:(NSString *)command nextState:(NSInteger)state {
-    if (!_outputStream || !command) return NO;
-
-    NSData *data = [command dataUsingEncoding:NSUTF8StringEncoding];
-    const uint8_t *bytes = (const uint8_t *)[data bytes];
-    NSUInteger total = [data length];
-    NSUInteger offset = 0;
-
-    while (offset < total) {
-        NSInteger written = [_outputStream write:bytes + offset maxLength:total - offset];
-        if (written <= 0) {
-            NSError *streamError = [_outputStream streamError];
-            NSString *message = streamError ? [streamError localizedDescription] : @"Unable to write to IMAP server.";
-            [self failWithError:[self errorWithCode:101 description:message]];
-            return NO;
-        }
-        offset += (NSUInteger)written;
-    }
-
-    [_receiveBuffer setLength:0];
-    _state = state;
-    [self resetTimeout];
-    return YES;
-}
-
-- (void)fetchLatestHeadersForAccount:(IMBAccount *)account password:(NSString *)password {
-    [self cancel];
-    [self cleanupSessionObjects];
-
-    if (!account || [account.imapHost length] == 0 || account.imapPort == 0) {
-        _finished = NO;
-        [self failWithError:[self errorWithCode:102 description:@"IMAP server or port is missing."]];
-        return;
-    }
-    if ([account.username length] == 0 || [password length] == 0) {
-        _finished = NO;
-        [self failWithError:[self errorWithCode:103 description:@"Username or password is missing."]];
-        return;
-    }
-
-    _finished = NO;
-    _account = [account retain];
-    _password = [password copy];
-    _messageCount = 0;
-    [_receiveBuffer setLength:0];
-
-    CFReadStreamRef readStream = NULL;
-    CFWriteStreamRef writeStream = NULL;
-    CFStreamCreatePairWithSocketToHost(kCFAllocatorDefault,
-                                       (CFStringRef)account.imapHost,
-                                       (UInt32)account.imapPort,
-                                       &readStream,
-                                       &writeStream);
-
-    if (!readStream || !writeStream) {
-        if (readStream) CFRelease(readStream);
-        if (writeStream) CFRelease(writeStream);
-        [self failWithError:[self errorWithCode:104 description:@"Unable to create IMAP network streams."]];
-        return;
-    }
-
-    _inputStream = (NSInputStream *)readStream;
-    _outputStream = (NSOutputStream *)writeStream;
-
-    if (account.imapUseSSL) {
-        NSDictionary *sslSettings = [NSDictionary dictionaryWithObjectsAndKeys:
-                                     (id)kCFStreamSocketSecurityLevelNegotiatedSSL, (id)kCFStreamSSLLevel,
-                                     account.imapHost, (id)kCFStreamSSLPeerName,
-                                     nil];
-        CFReadStreamSetProperty(readStream, kCFStreamPropertySSLSettings, (CFTypeRef)sslSettings);
-        CFWriteStreamSetProperty(writeStream, kCFStreamPropertySSLSettings, (CFTypeRef)sslSettings);
-    }
-
-    [_inputStream setDelegate:self];
-    [_outputStream setDelegate:self];
-    [_inputStream scheduleInRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
-    [_outputStream scheduleInRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
-
-    _state = IMBIMAPStateWaitingGreeting;
-    [_inputStream open];
-    [_outputStream open];
-    [self resetTimeout];
-}
-
-- (NSString *)responseString {
-    if ([_receiveBuffer length] == 0) return @"";
-    NSString *text = [[[NSString alloc] initWithData:_receiveBuffer encoding:NSUTF8StringEncoding] autorelease];
+- (NSString *)stringFromData:(NSData *)data {
+    if ([data length] == 0) return @"";
+    NSString *text = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
     if (!text) {
-        text = [[[NSString alloc] initWithData:_receiveBuffer encoding:NSISOLatin1StringEncoding] autorelease];
+        text = [[[NSString alloc] initWithData:data encoding:NSISOLatin1StringEncoding] autorelease];
     }
     return text ? text : @"";
 }
@@ -349,127 +209,311 @@ enum {
     return reversed;
 }
 
-- (void)processReceivedData {
-    NSString *response = [self responseString];
-    if ([response length] == 0) return;
+- (NSError *)wrappedTransportError:(NSError *)transportError account:(IMBAccount *)account code:(NSInteger)code {
+    NSString *detail = transportError ? [transportError localizedDescription] : @"TLS transport failed.";
+    NSString *message = [NSString stringWithFormat:@"%@\n\nServer: %@:%lu (Mbed TLS)",
+                         detail,
+                         account.imapHost,
+                         (unsigned long)account.imapPort];
+    return [self errorWithCode:code description:message];
+}
 
-    if (_state == IMBIMAPStateWaitingGreeting) {
-        NSString *line = [self firstCompleteLineInResponse:response];
-        if (!line) return;
-
-        if ([line hasPrefix:@"* PREAUTH"]) {
-            [self sendCommand:@"A002 SELECT \"INBOX\"\r\n" nextState:IMBIMAPStateWaitingSelect];
-            return;
-        }
-        if (![line hasPrefix:@"* OK"]) {
-            [self failWithError:[self errorWithCode:105 description:[NSString stringWithFormat:@"Unexpected IMAP greeting: %@", line]]];
-            return;
-        }
-
-        NSString *login = [NSString stringWithFormat:@"A001 LOGIN %@ %@\r\n",
-                           [self quotedIMAPString:_account.username],
-                           [self quotedIMAPString:_password]];
-        [self sendCommand:login nextState:IMBIMAPStateWaitingLogin];
-        return;
+- (BOOL)sendCommand:(NSString *)command
+          transport:(IMBMBEDTLSTransport *)transport
+              token:(NSUInteger)token
+              error:(NSError **)error {
+    if (![self isOperationCurrent:token]) {
+        if (error) *error = [self errorWithCode:120 description:@"IMAP operation was cancelled."];
+        return NO;
     }
 
-    if (_state == IMBIMAPStateWaitingLogin) {
-        NSString *line = [self completeTaggedLineForTag:@"A001" response:response];
-        if (!line) return;
-        if (![self taggedLineIsOK:line tag:@"A001"]) {
-            [self failWithError:[self errorWithCode:106 description:[self messageForTaggedFailure:line fallback:@"IMAP login failed."]]];
-            return;
-        }
-        [self sendCommand:@"A002 SELECT \"INBOX\"\r\n" nextState:IMBIMAPStateWaitingSelect];
-        return;
+    NSData *data = [command dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *transportError = nil;
+    if (![transport writeData:data timeout:IMBIMAPCommandTimeout error:&transportError]) {
+        if (error) *error = transportError;
+        return NO;
     }
+    return YES;
+}
 
-    if (_state == IMBIMAPStateWaitingSelect) {
-        NSString *line = [self completeTaggedLineForTag:@"A002" response:response];
-        if (!line) return;
-        if (![self taggedLineIsOK:line tag:@"A002"]) {
-            [self failWithError:[self errorWithCode:107 description:[self messageForTaggedFailure:line fallback:@"Unable to open INBOX."]]];
-            return;
+- (NSString *)readResponseFromTransport:(IMBMBEDTLSTransport *)transport
+                                    tag:(NSString *)tag
+                               greeting:(BOOL)greeting
+                                  token:(NSUInteger)token
+                                  error:(NSError **)error {
+    NSMutableData *buffer = [NSMutableData data];
+    NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + IMBIMAPCommandTimeout;
+
+    for (;;) {
+        if (![self isOperationCurrent:token]) {
+            if (error) *error = [self errorWithCode:120 description:@"IMAP operation was cancelled."];
+            return nil;
         }
 
-        _messageCount = [self existsCountFromSelectResponse:response];
-        if (_messageCount == 0) {
-            [self finishWithMessages:[NSArray array]];
-            return;
+        NSTimeInterval remaining = deadline - [NSDate timeIntervalSinceReferenceDate];
+        if (remaining <= 0.0) {
+            if (error) *error = [self errorWithCode:121 description:@"IMAP command timed out after 20 seconds."];
+            return nil;
         }
 
-        NSUInteger first = (_messageCount > 25) ? (_messageCount - 24) : 1;
-        NSString *fetch = [NSString stringWithFormat:@"A003 FETCH %lu:%lu (UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])\r\n",
-                           (unsigned long)first,
-                           (unsigned long)_messageCount];
-        [self sendCommand:fetch nextState:IMBIMAPStateWaitingFetch];
-        return;
-    }
-
-    if (_state == IMBIMAPStateWaitingFetch) {
-        NSString *line = [self completeTaggedLineForTag:@"A003" response:response];
-        if (!line) return;
-        if (![self taggedLineIsOK:line tag:@"A003"]) {
-            [self failWithError:[self errorWithCode:108 description:[self messageForTaggedFailure:line fallback:@"Unable to fetch message headers."]]];
-            return;
+        uint8_t bytes[4096];
+        NSError *transportError = nil;
+        NSInteger readCount = [transport readBytes:bytes
+                                         maxLength:sizeof(bytes)
+                                           timeout:remaining
+                                             error:&transportError];
+        if (readCount < 0) {
+            if (error) *error = transportError;
+            return nil;
+        }
+        if (readCount == 0) {
+            if (error) *error = [self errorWithCode:122 description:@"IMAP server closed the TLS connection unexpectedly."];
+            return nil;
         }
 
-        NSArray *messages = [self messagesFromFetchResponse:response];
-        [self finishWithMessages:messages];
+        [buffer appendBytes:bytes length:(NSUInteger)readCount];
+        if ([buffer length] > IMBIMAPMaximumResponseBytes) {
+            if (error) *error = [self errorWithCode:123 description:@"IMAP response exceeded the 512 KB safety limit."];
+            return nil;
+        }
+
+        NSString *response = [self stringFromData:buffer];
+        if (greeting) {
+            if ([self firstCompleteLineInResponse:response]) return response;
+        } else if ([tag length] > 0) {
+            if ([self completeTaggedLineForTag:tag response:response]) return response;
+        }
     }
 }
 
-- (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode {
-    if (_finished) return;
+- (NSDictionary *)resultWithToken:(NSUInteger)token messages:(NSArray *)messages error:(NSError *)error {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    [result setObject:[NSNumber numberWithUnsignedInteger:token] forKey:@"token"];
+    if (messages) [result setObject:messages forKey:@"messages"];
+    if (error) [result setObject:error forKey:@"error"];
+    return result;
+}
 
-    switch (eventCode) {
-        case NSStreamEventOpenCompleted:
-            [self resetTimeout];
-            break;
+- (void)finishOperationOnMainThread:(NSDictionary *)result {
+    NSUInteger token = [[result objectForKey:@"token"] unsignedIntegerValue];
+    if (![self isOperationCurrent:token]) return;
 
-        case NSStreamEventHasBytesAvailable: {
-            uint8_t buffer[2048];
-            NSInteger readCount = [(NSInputStream *)aStream read:buffer maxLength:sizeof(buffer)];
-            if (readCount > 0) {
-                [_receiveBuffer appendBytes:buffer length:(NSUInteger)readCount];
-                [self resetTimeout];
-                [self processReceivedData];
-            } else if (readCount < 0) {
-                NSError *streamError = [aStream streamError];
-                NSString *message = streamError ? [streamError localizedDescription] : @"IMAP read failed.";
-                [self failWithError:[self errorWithCode:109 description:message]];
-            }
-            break;
+    NSError *error = [result objectForKey:@"error"];
+    NSArray *messages = [result objectForKey:@"messages"];
+    id<IMBIMAPClientDelegate> delegate = _delegate;
+
+    if (error) {
+        if (delegate && [delegate respondsToSelector:@selector(imapClient:didFailWithError:)]) {
+            [delegate imapClient:self didFailWithError:error];
         }
-
-        case NSStreamEventErrorOccurred: {
-            NSError *streamError = [aStream streamError];
-            NSString *message = streamError ? [streamError localizedDescription] : @"IMAP network or SSL/TLS error.";
-            if (_account) {
-                message = [NSString stringWithFormat:@"%@\n\nServer: %@:%lu%@",
-                           message,
-                           _account.imapHost,
-                           (unsigned long)_account.imapPort,
-                           _account.imapUseSSL ? @" (SSL/TLS)" : @""];
-            }
-            [self failWithError:[self errorWithCode:110 description:message]];
-            break;
+    } else {
+        if (!messages) messages = [NSArray array];
+        if (delegate && [delegate respondsToSelector:@selector(imapClient:didLoadMessages:)]) {
+            [delegate imapClient:self didLoadMessages:messages];
         }
-
-        case NSStreamEventEndEncountered:
-            [self failWithError:[self errorWithCode:111 description:@"IMAP server closed the connection unexpectedly."]];
-            break;
-
-        default:
-            break;
     }
+}
+
+- (void)performFetchOperation:(NSDictionary *)arguments {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
+    IMBAccount *account = [arguments objectForKey:@"account"];
+    NSString *password = [arguments objectForKey:@"password"];
+    NSUInteger token = [[arguments objectForKey:@"token"] unsignedIntegerValue];
+
+    IMBMBEDTLSTransport *transport = [[IMBMBEDTLSTransport alloc] init];
+    [self setActiveTransport:transport forToken:token];
+
+    NSError *error = nil;
+    NSArray *messages = nil;
+
+    if (![self isOperationCurrent:token]) goto done;
+
+    if (!account.imapUseSSL) {
+        error = [self errorWithCode:124 description:@"This build requires implicit SSL/TLS for IMAP. Non-TLS IMAP is disabled."];
+        goto done;
+    }
+
+    NSError *transportError = nil;
+    if (![transport connectToHost:account.imapHost
+                             port:account.imapPort
+                          timeout:IMBIMAPCommandTimeout
+                            error:&transportError]) {
+        if ([self isOperationCurrent:token]) {
+            error = [self wrappedTransportError:transportError account:account code:125];
+        }
+        goto done;
+    }
+
+    NSString *response = [self readResponseFromTransport:transport
+                                                     tag:nil
+                                                greeting:YES
+                                                   token:token
+                                                   error:&transportError];
+    if (!response) {
+        if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:126];
+        goto done;
+    }
+
+    NSString *greetingLine = [self firstCompleteLineInResponse:response];
+    if (![greetingLine hasPrefix:@"* OK"] && ![greetingLine hasPrefix:@"* PREAUTH"]) {
+        error = [self errorWithCode:127
+                        description:[NSString stringWithFormat:@"Unexpected IMAP greeting: %@", greetingLine]];
+        goto done;
+    }
+
+    if (![greetingLine hasPrefix:@"* PREAUTH"]) {
+        NSString *login = [NSString stringWithFormat:@"A001 LOGIN %@ %@\r\n",
+                           [self quotedIMAPString:account.username],
+                           [self quotedIMAPString:password]];
+        if (![self sendCommand:login transport:transport token:token error:&transportError]) {
+            if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:128];
+            goto done;
+        }
+
+        response = [self readResponseFromTransport:transport
+                                               tag:@"A001"
+                                          greeting:NO
+                                             token:token
+                                             error:&transportError];
+        if (!response) {
+            if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:129];
+            goto done;
+        }
+
+        NSString *loginLine = [self completeTaggedLineForTag:@"A001" response:response];
+        if (![self taggedLineIsOK:loginLine tag:@"A001"]) {
+            error = [self errorWithCode:130
+                            description:[self messageForTaggedFailure:loginLine fallback:@"IMAP login failed."]];
+            goto done;
+        }
+    }
+
+    if (![self sendCommand:@"A002 SELECT \"INBOX\"\r\n"
+                 transport:transport
+                     token:token
+                     error:&transportError]) {
+        if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:131];
+        goto done;
+    }
+
+    response = [self readResponseFromTransport:transport
+                                           tag:@"A002"
+                                      greeting:NO
+                                         token:token
+                                         error:&transportError];
+    if (!response) {
+        if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:132];
+        goto done;
+    }
+
+    NSString *selectLine = [self completeTaggedLineForTag:@"A002" response:response];
+    if (![self taggedLineIsOK:selectLine tag:@"A002"]) {
+        error = [self errorWithCode:133
+                        description:[self messageForTaggedFailure:selectLine fallback:@"Unable to open INBOX."]];
+        goto done;
+    }
+
+    NSUInteger messageCount = [self existsCountFromSelectResponse:response];
+    if (messageCount == 0) {
+        messages = [NSArray array];
+        goto logout;
+    }
+
+    NSUInteger first = (messageCount > 25) ? (messageCount - 24) : 1;
+    NSString *fetch = [NSString stringWithFormat:@"A003 FETCH %lu:%lu (UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])\r\n",
+                       (unsigned long)first,
+                       (unsigned long)messageCount];
+    if (![self sendCommand:fetch transport:transport token:token error:&transportError]) {
+        if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:134];
+        goto done;
+    }
+
+    response = [self readResponseFromTransport:transport
+                                           tag:@"A003"
+                                      greeting:NO
+                                         token:token
+                                         error:&transportError];
+    if (!response) {
+        if ([self isOperationCurrent:token]) error = [self wrappedTransportError:transportError account:account code:135];
+        goto done;
+    }
+
+    NSString *fetchLine = [self completeTaggedLineForTag:@"A003" response:response];
+    if (![self taggedLineIsOK:fetchLine tag:@"A003"]) {
+        error = [self errorWithCode:136
+                        description:[self messageForTaggedFailure:fetchLine fallback:@"Unable to fetch message headers."]];
+        goto done;
+    }
+
+    messages = [self messagesFromFetchResponse:response];
+
+logout:
+    if ([self isOperationCurrent:token] && [transport isConnected]) {
+        NSData *logoutData = [@"A999 LOGOUT\r\n" dataUsingEncoding:NSUTF8StringEncoding];
+        [transport writeData:logoutData timeout:2.0 error:NULL];
+    }
+
+done:
+    [transport close];
+    [self clearActiveTransportIfMatches:transport];
+
+    if ([self isOperationCurrent:token]) {
+        NSDictionary *result = [self resultWithToken:token messages:messages error:error];
+        [self performSelectorOnMainThread:@selector(finishOperationOnMainThread:)
+                               withObject:result
+                            waitUntilDone:NO];
+    }
+
+    [transport release];
+    [pool drain];
+}
+
+- (void)fetchLatestHeadersForAccount:(IMBAccount *)account password:(NSString *)password {
+    if (!account || [account.imapHost length] == 0 || account.imapPort == 0) {
+        NSError *error = [self errorWithCode:102 description:@"IMAP server or port is missing."];
+        id<IMBIMAPClientDelegate> delegate = _delegate;
+        if (delegate && [delegate respondsToSelector:@selector(imapClient:didFailWithError:)]) {
+            [delegate imapClient:self didFailWithError:error];
+        }
+        return;
+    }
+    if ([account.username length] == 0 || [password length] == 0) {
+        NSError *error = [self errorWithCode:103 description:@"Username or password is missing."];
+        id<IMBIMAPClientDelegate> delegate = _delegate;
+        if (delegate && [delegate respondsToSelector:@selector(imapClient:didFailWithError:)]) {
+            [delegate imapClient:self didFailWithError:error];
+        }
+        return;
+    }
+
+    [self cancel];
+
+    NSUInteger token = 0;
+    @synchronized(self) {
+        _generation++;
+        token = _generation;
+    }
+
+    NSDictionary *arguments = [[NSDictionary alloc] initWithObjectsAndKeys:
+                               account, @"account",
+                               password, @"password",
+                               [NSNumber numberWithUnsignedInteger:token], @"token",
+                               nil];
+
+    [NSThread detachNewThreadSelector:@selector(performFetchOperation:)
+                             toTarget:self
+                           withObject:arguments];
+    [arguments release];
 }
 
 - (void)dealloc {
     _delegate = nil;
     [self cancel];
-    [self cleanupSessionObjects];
-    [_receiveBuffer release];
+    @synchronized(self) {
+        [_activeTransport release];
+        _activeTransport = nil;
+    }
     [super dealloc];
 }
 
