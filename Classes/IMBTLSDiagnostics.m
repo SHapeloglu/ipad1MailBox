@@ -1,5 +1,6 @@
 #import "IMBTLSDiagnostics.h"
 #import <Security/SecureTransport.h>
+#include <stdlib.h>
 
 @implementation IMBTLSDiagnostics
 
