@@ -8,6 +8,7 @@
     IMBIMAPClient *_client;
     NSArray *_messages;
     NSString *_statusText;
+    UITextView *_diagnosticsTextView;
     BOOL _loading;
 }
 
