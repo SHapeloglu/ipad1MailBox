@@ -8,7 +8,7 @@ Establish a fully verified TLS 1.2 IMAP connection from the physical iPad 1 to `
 
 ## Current state
 
-The physical iPad is running `iPad1MailBox 0.3-alpha1`.
+The physical iPad is running `iPad1MailBox 0.3-alpha1`. The next build is `0.3-alpha2`.
 
 Confirmed:
 
@@ -19,7 +19,7 @@ Confirmed:
 - SecureTransport diagnostics confirmed that iOS 5.1.1 does not support the server's required ECDHE-ECDSA AES-GCM suites.
 - Certificate verification has not been disabled.
 
-Current Mbed TLS probe failure:
+Previous Mbed TLS probe failure:
 
 ```text
 RNG seed: OK
@@ -28,20 +28,25 @@ X509 - Signature algorithm (oid) is unsupported
 OID - OID is not found
 ```
 
-The failure happens while parsing the bundled trust anchor, before the TCP/TLS handshake stage of the probe.
+That failure occurred while parsing ISRG Root X1, which is an RSA 4096 root. The server's current ECDSA certificate hierarchy can instead terminate at ISRG Root X2, an ECDSA P-384 root.
 
-## Working hypothesis
+## Current implementation change
 
-The minimal Mbed TLS configuration supports ECDHE-ECDSA for the TLS session but does not yet include the RSA signature/X.509 capability needed to parse and verify an RSA-signed trust anchor such as ISRG Root X1.
+`0.3-alpha2` changes the trust anchor to **ISRG Root X2** and enables the minimum RSA PKCS#1 v1.5 signature support needed to recognise RSA-signed cross-certificates that may still appear in the server-provided chain.
 
-This is separate from TLS key exchange: enabling RSA certificate signature verification does **not** mean enabling RSA key exchange.
+Important distinction:
+
+- TLS key exchange remains **ECDHE-ECDSA only**.
+- Allowed TLS ciphers remain **AES-GCM ECDHE-ECDSA only**.
+- RSA support is present only for X.509 certificate-signature compatibility.
+- Certificate and hostname verification remain mandatory.
 
 ## Next actions
 
-1. Add only the RSA/X.509 signature support required to parse and verify the trust chain.
-2. Keep TLS key exchange restricted to ECDHE-ECDSA and AES-GCM.
-3. Rebuild `0.3-alpha1` or bump to the next alpha if behavior changes materially.
-4. Run the Mbed TLS probe on the physical iPad.
+1. Pull `0.3-alpha2`.
+2. Run `make bootstrap` so the new Mbed TLS config is copied and ISRG Root X2 is downloaded.
+3. Rebuild and install on the physical iPad.
+4. Run the Mbed TLS probe.
 5. Require all of the following before integrating with `IMBIMAPClient`:
    - CA trust anchor loads
    - TCP connect succeeds
@@ -59,6 +64,7 @@ This is separate from TLS key exchange: enabling RSA certificate signature verif
 - Do not accept all roots/certificates.
 - Do not re-enable obsolete TLS versions to make the server compatible.
 - Do not weaken the mail server cipher configuration for the iPad.
+- Do not enable RSA key-exchange suites.
 - Do not store credentials outside Keychain.
 - Do not mix SMTP work into this task until IMAP transport is stable.
 
@@ -68,7 +74,7 @@ The task is complete when the physical iPad can display a diagnostic result equi
 
 ```text
 RNG seed: OK
-CA trust anchor: OK
+CA trust anchor: ISRG Root X2 loaded
 TCP connect: OK
 SNI/hostname: mail.olap.com.tr
 TLS handshake: OK
