@@ -1,14 +1,14 @@
-# Current Task
+# Güncel Görev
 
-_Last updated: 2026-09-17_
+_Son güncelleme: 2026-09-17_
 
-## Goal
+## Hedef
 
-Validate the first on-demand message reader on the physical iPad 1 while preserving the now-working Mbed TLS Inbox and RFC 2047 header decoding.
+Artık çalışan Mbed TLS Gelen Kutusu ve RFC 2047 başlık çözmeyi koruyarak ilk istek üzerine çalışan mesaj okuyucuyu fiziksel iPad 1'de doğrulamak.
 
-## Completed gates
+## Tamamlanan kapılar
 
-`0.4-alpha1` proved normal Inbox loading over `IMBMBEDTLSTransport`:
+`0.4-alpha1`, `IMBMBEDTLSTransport` üzerinden normal Gelen Kutusu yüklemesini kanıtladı:
 
 ```text
 verified Mbed TLS 1.2
@@ -18,13 +18,13 @@ verified Mbed TLS 1.2
 -> message list displayed
 ```
 
-`0.4-alpha2` was then tested successfully on the physical iPad. UTF-8 and ISO-8859-9 RFC 2047 Subject/From values now display as readable Turkish text.
+Ardından `0.4-alpha2` fiziksel iPad'de başarıyla test edildi. UTF-8 ve ISO-8859-9 RFC 2047 Konu/Gönderen değerleri artık okunabilir Türkçe metin olarak görünüyor.
 
-## 0.5-alpha1 implementation prepared
+## Hazırlanan 0.5-alpha1 uygulaması
 
-Selecting an Inbox row now pushes `IMBMessageReaderViewController` instead of showing the old placeholder alert.
+Gelen Kutusu'nda bir satır seçmek artık eski yer tutucu uyarı yerine `IMBMessageReaderViewController`'ı açıyor.
 
-The reader requests the selected message by IMAP UID over the same verified Mbed TLS transport:
+Okuyucu seçilen mesajı aynı doğrulanmış Mbed TLS taşıması üzerinden IMAP UID ile istiyor:
 
 ```text
 connect / LOGIN / SELECT INBOX
@@ -34,49 +34,49 @@ connect / LOGIN / SELECT INBOX
 -> display first non-attachment text/plain part
 ```
 
-New MIME support is deliberately bounded and conservative:
+Yeni MIME desteği bilinçli olarak sınırlı ve temkinli:
 
-- maximum fetched raw message prefix: 256 KB
-- total IMAP response safety limit remains 512 KB
-- text/plain only for this milestone
-- multipart recursion with a small depth limit
-- quoted-printable body decoding
-- Base64 body decoding
-- charset conversion through CoreFoundation
-- attachment parts are skipped
-- HTML rendering is not enabled yet
+- getirilen ham mesaj ön eki en fazla 256 KB
+- toplam IMAP yanıtı güvenlik sınırı 512 KB olarak kalıyor
+- bu kilometre taşında yalnızca text/plain
+- küçük derinlik sınırıyla çok parçalı özyineleme
+- quoted-printable gövde çözme
+- Base64 gövde çözme
+- CoreFoundation ile karakter seti dönüşümü
+- ek parçaları atlanıyor
+- HTML görüntüleme henüz açık değil
 
-## Next actions
+## Sonraki adımlar
 
-1. Pull and build `0.5-alpha1`.
-2. No Mbed TLS bootstrap/config change is required.
-3. Install on the physical iPad.
-4. Open Inbox and tap several different messages.
-5. Confirm Subject / From / Date remain visible and a plain-text body loads below them.
-6. Test at least one multipart message and one Turkish message if available.
-7. Return to Inbox and open another message to exercise cancellation/lifecycle behavior.
-8. If a message has no text/plain part, the reader should show the explicit fallback rather than crash.
+1. `0.5-alpha1`'i çek ve derle.
+2. Mbed TLS bootstrap/yapılandırma değişikliği gerekmiyor.
+3. Fiziksel iPad'e kur.
+4. Gelen Kutusu'nu aç ve birkaç farklı mesaja dokun.
+5. Konu / Gönderen / Tarih'in görünür kaldığını ve altında düz metin gövdenin yüklendiğini doğrula.
+6. Varsa en az bir çok parçalı ve bir Türkçe mesajı test et.
+7. İptal/yaşam döngüsü davranışını denemek için Gelen Kutusu'na dönüp başka bir mesaj aç.
+8. Mesajda text/plain parçası yoksa okuyucu çökmek yerine açık bir yedek mesaj göstermeli.
 
-## Acceptance criteria
+## Kabul ölçütleri
 
-- Inbox continues to load normally
-- tapping a row opens a real reader screen
-- selected message is fetched by UID, not sequence number
-- text/plain body is shown when present
-- quoted-printable and Base64 text bodies decode correctly
-- common charsets, including Turkish legacy charsets recognized by CoreFoundation, display correctly
-- large messages are bounded to a 256 KB preview
-- HTML-only or unsupported MIME messages fail gracefully
-- credentials remain only in Keychain
-- TLS certificate and hostname verification remain mandatory
+- Gelen Kutusu normal yüklenmeye devam ediyor
+- bir satıra dokunmak gerçek bir okuyucu ekranı açıyor
+- seçilen mesaj sıra numarasıyla değil UID ile getiriliyor
+- varsa text/plain gövde gösteriliyor
+- quoted-printable ve Base64 metin gövdeleri doğru çözülüyor
+- CoreFoundation'ın tanıdığı eski Türkçe karakter setleri dahil yaygın karakter setleri doğru görünüyor
+- büyük mesajlar 256 KB önizlemeyle sınırlı
+- yalnızca HTML içeren veya desteklenmeyen MIME mesajları nazikçe başarısız oluyor
+- kimlik bilgileri yalnızca Keychain'de kalıyor
+- TLS sertifika ve host adı doğrulaması zorunlu kalıyor
 
-## Do not
+## Yapma
 
-- Do not weaken TLS verification.
-- Do not fetch entire unbounded messages or attachments.
-- Do not render HTML yet.
-- Do not add SMTP, attachment downloads, or offline cache in this milestone.
+- TLS doğrulamasını zayıflatma.
+- Sınırsız mesajların veya eklerin tamamını getirme.
+- HTML'i henüz görüntüleme.
+- Bu kilometre taşında SMTP, ek indirme veya çevrimdışı önbellek ekleme.
 
-## Definition of done
+## "Bitti" tanımı
 
-The task is complete when the physical iPad can open several real Inbox messages and display their readable text/plain body on demand without destabilizing the existing Inbox path.
+Görev, fiziksel iPad mevcut Gelen Kutusu yolunu bozmadan birkaç gerçek Gelen Kutusu mesajını açıp okunabilir text/plain gövdelerini istek üzerine gösterebildiğinde tamamlanır.

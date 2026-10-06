@@ -1,26 +1,26 @@
-# Session Handoff
+# Oturum Devri
 
-_Last updated: 2026-09-17_
+_Son güncelleme: 2026-09-17_
 
-## Where we are
+## Neredeyiz
 
-The physical iPad 1 has now passed both the modern transport and header-decoding milestones.
+Fiziksel iPad 1 artık hem modern taşıma hem de başlık çözme kilometre taşlarını geçti.
 
-Latest proven device build:
+En son kanıtlanmış cihaz derlemesi:
 
 ```text
 iPad1MailBox 0.4-alpha2
 ```
 
-Next test build:
+Sıradaki test derlemesi:
 
 ```text
 iPad1MailBox 0.5-alpha1
 ```
 
-## Proven on the physical iPad
+## Fiziksel iPad'de kanıtlananlar
 
-Normal Inbox works through verified Mbed TLS 3.6.7:
+Normal Gelen Kutusu doğrulanmış Mbed TLS 3.6.7 üzerinden çalışıyor:
 
 ```text
 TLS 1.2
@@ -31,30 +31,30 @@ TLS 1.2
 -> readable Turkish message list
 ```
 
-The old SecureTransport `OSStatus -9844` normal-operation failure is gone. UTF-8 and ISO-8859-9 encoded Subject/From fields now render correctly.
+Eski SecureTransport `OSStatus -9844` normal çalışma hatası ortadan kalktı. UTF-8 ve ISO-8859-9 ile kodlanmış Konu/Gönderen alanları artık doğru görünüyor.
 
-## 0.5-alpha1 changes prepared
+## Hazırlanan 0.5-alpha1 değişiklikleri
 
-### Message reader
+### Mesaj okuyucu
 
-New controller:
+Yeni controller:
 
 ```text
 Classes/IMBMessageReaderViewController.h
 Classes/IMBMessageReaderViewController.m
 ```
 
-Tapping an Inbox row now pushes a real message screen showing Subject, From, Date and an on-demand body.
+Gelen Kutusu'ndaki bir satıra dokunmak artık Konu, Gönderen, Tarih ve istek üzerine yüklenen gövdeyi gösteren gerçek bir mesaj ekranı açıyor.
 
-### Bounded body fetch
+### Sınırlı gövde getirme
 
-`IMBIMAPClient` now supports:
+`IMBIMAPClient` artık şunu destekliyor:
 
 ```text
 fetchMessageBodyForAccount:password:uid:
 ```
 
-Flow:
+Akış:
 
 ```text
 connect
@@ -66,28 +66,28 @@ connect
 -> LOGOUT
 ```
 
-The selected message is addressed by UID rather than sequence number.
+Seçilen mesaja sıra numarasıyla değil UID ile erişiliyor.
 
-### MIME text extraction
+### MIME metin çıkarma
 
-New files:
+Yeni dosyalar:
 
 ```text
 Classes/IMBMIMETextExtractor.h
 Classes/IMBMIMETextExtractor.m
 ```
 
-Current scope:
+Güncel kapsam:
 
-- first non-attachment `text/plain` entity
-- multipart recursion with bounded depth
-- quoted-printable decode
-- Base64 decode
-- charset conversion through CoreFoundation
-- attachment parts skipped
-- HTML is intentionally not rendered yet
+- ek olmayan ilk `text/plain` parçası
+- sınırlı derinlikte çok parçalı (multipart) özyineleme
+- quoted-printable çözme
+- Base64 çözme
+- CoreFoundation ile karakter seti dönüşümü
+- ek parçaları atlanır
+- HTML bilinçli olarak henüz görüntülenmiyor
 
-Memory/safety bounds:
+Bellek/güvenlik sınırları:
 
 ```text
 message prefix: 256 KB maximum
@@ -95,9 +95,11 @@ IMAP accumulated response: 512 KB maximum
 command timeout: 20 seconds
 ```
 
-## Build commands
+(mesaj ön eki en fazla 256 KB · biriken IMAP yanıtı en fazla 512 KB · komut zaman aşımı 20 saniye)
 
-No Mbed TLS config changed, so bootstrap is not required if the existing local vendor tree is current.
+## Derleme komutları
+
+Mbed TLS yapılandırması değişmedi; mevcut yerel vendor ağacı güncelse bootstrap gerekmez.
 
 ```bash
 cd ~/projects/ipad1MailBox
@@ -107,13 +109,13 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-Expected package:
+Beklenen paket:
 
 ```text
 packages/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb
 ```
 
-Copy:
+Kopyalama:
 
 ```bash
 scp -o HostKeyAlgorithms=+ssh-rsa \
@@ -122,7 +124,7 @@ packages/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb \
 root@192.168.1.100:/var/mobile/
 ```
 
-Install:
+Kurulum:
 
 ```bash
 dpkg -i /var/mobile/com.shapeloglu.ipad1mailbox_0.5-alpha1_iphoneos-arm.deb
@@ -130,10 +132,10 @@ su mobile -c 'HOME=/var/mobile /usr/bin/uicache'
 killall SpringBoard
 ```
 
-## What to test next
+## Sırada test edilecekler
 
-Open several messages from Inbox. Confirm at least one plain-text or multipart mail displays readable content. Test navigating back and opening another message. HTML-only messages may intentionally show the plain-text-not-found fallback in this milestone.
+Gelen Kutusu'ndan birkaç mesaj aç. En az bir düz metin veya çok parçalı e-postanın okunabilir içerik gösterdiğini doğrula. Geri dönüp başka bir mesaj açmayı test et. Yalnızca HTML içeren mesajlar bu kilometre taşında bilinçli olarak "düz metin bulunamadı" yedek mesajını gösterebilir.
 
-## Resume here
+## Buradan devam et
 
-Read `TASK.md`. Build and physically test `0.5-alpha1`. Fix any compile/runtime/MIME issues before adding HTML rendering, attachments or SMTP.
+`TASK.md`'yi oku. `0.5-alpha1`'i derle ve fiziksel olarak test et. HTML görüntüleme, ekler veya SMTP eklemeden önce derleme/çalışma zamanı/MIME sorunlarını düzelt.

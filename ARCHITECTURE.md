@@ -1,144 +1,144 @@
-# iPad1MailBox Architecture
+# iPad1MailBox Mimarisi
 
-## Purpose
+## Amaç
 
-iPad1MailBox is a lightweight mail client for the original iPad. The project favors predictable memory use, explicit ownership, small dependencies, and compatibility with iOS 5.1.1 over modern-platform convenience APIs.
+iPad1MailBox, orijinal iPad için hafif bir e-posta istemcisidir. Proje, güncel platformların kolaylık API'leri yerine öngörülebilir bellek kullanımını, açık sahipliği, küçük bağımlılıkları ve iOS 5.1.1 uyumluluğunu tercih eder.
 
-## Hard constraints
+## Kesin kısıtlar
 
-- Device: original iPad
-- OS: iOS 5.1.1
-- Architecture: armv7
+- Cihaz: orijinal iPad
+- İşletim sistemi: iOS 5.1.1
+- Mimari: armv7
 - RAM: 256 MB
 - Objective-C / UIKit
-- non-ARC memory management
+- non-ARC bellek yönetimi
 - Theos + iPhoneOS 6.1 SDK
-- no dependency on modern iOS APIs
+- güncel iOS API'lerine bağımlılık yok
 
-## Architectural rules
+## Mimari kurallar
 
-1. UI code must not own protocol or cryptographic details.
-2. Passwords belong in Keychain only. Never store passwords in plist, `NSUserDefaults`, SQLite, logs, or diagnostics.
-3. Certificate verification must remain enabled. Do not use `AllowsAnyRoot`, accept-all verification callbacks, or other trust bypasses.
-4. Fetch mailbox content incrementally. Do not load a whole mailbox, large message body, or attachment into memory unnecessarily.
-5. iPad1MailBox owns mail functionality only. General file management belongs to iPad1Files and media/document rendering is handed to the appropriate suite application.
+1. Arayüz kodu protokol veya kriptografi ayrıntılarına sahip olmamalı.
+2. Şifreler yalnızca Keychain'e aittir. Şifreleri asla plist, `NSUserDefaults`, SQLite, günlükler veya tanılamalarda saklama.
+3. Sertifika doğrulaması açık kalmalı. `AllowsAnyRoot`, her şeyi kabul eden doğrulama geri çağrıları veya başka güven atlatmaları kullanma.
+4. Posta kutusu içeriğini kademeli getir. Gereksiz yere tüm posta kutusunu, büyük mesaj gövdesini veya eki belleğe yükleme.
+5. iPad1MailBox yalnızca e-posta işlevinin sahibidir. Genel dosya yönetimi iPad1Files'a aittir; medya/belge görüntüleme uygun uygulamaya devredilir.
 
-## Layers
+## Katmanlar
 
-### UI
+### Arayüz
 
-- `IMBAppDelegate` - application bootstrap and split-view setup
-- `IMBInboxViewController` - account/mailbox sidebar
-- `IMBAccountSetupViewController` - account configuration
-- `IMBMessageListViewController` - Inbox state, header list, refresh, TLS diagnostics
-- `IMBComposeViewController` - compose shell
+- `IMBAppDelegate` - uygulama başlatma ve bölünmüş görünüm kurulumu
+- `IMBInboxViewController` - hesap/posta kutusu kenar çubuğu
+- `IMBAccountSetupViewController` - hesap yapılandırması
+- `IMBMessageListViewController` - Gelen Kutusu durumu, başlık listesi, yenileme, TLS tanılamaları
+- `IMBComposeViewController` - mesaj yazma ekranı iskeleti
 
-### Account and credential storage
+### Hesap ve kimlik bilgisi saklama
 
-- `IMBAccount` - non-secret IMAP/SMTP configuration
-- `IMBAccountStore` - metadata persistence and Keychain credential storage
-- `entitlements.plist` - application/keychain access group required by iOS 5 code signing
+- `IMBAccount` - gizli olmayan IMAP/SMTP yapılandırması
+- `IMBAccountStore` - metadata kalıcılığı ve Keychain kimlik bilgisi saklama
+- `entitlements.plist` - iOS 5 kod imzalaması için gereken uygulama/keychain erişim grubu
 
-### IMAP protocol
+### IMAP protokolü
 
-`IMBIMAPClient` owns the minimum IMAP state flow required for the current mailbox milestone:
+`IMBIMAPClient`, güncel posta kutusu kilometre taşı için gereken en küçük IMAP durum akışından sorumludur:
 
-1. connect through the transport
-2. wait for server greeting
+1. taşıma üzerinden bağlan
+2. sunucu karşılamasını bekle
 3. `LOGIN`
 4. `SELECT INBOX`
-5. read `EXISTS`
-6. fetch the latest 25 message headers
-7. close cleanly
+5. `EXISTS`'i oku
+6. en son 25 mesaj başlığını getir
+7. temiz şekilde kapat
 
-Starting with `0.4-alpha1`, normal IMAP operation no longer uses CFStream/SecureTransport. It executes on a background thread and delegates encrypted network I/O to `IMBMBEDTLSTransport`.
+`0.4-alpha1`'den itibaren normal IMAP çalışması artık CFStream/SecureTransport kullanmıyor. Arka plan iş parçacığında çalışır ve şifreli ağ G/Ç'sini `IMBMBEDTLSTransport`'a devreder.
 
-The IMAP parser remains separate from TLS so SMTP can later reuse the same transport without duplicating cryptographic/network code.
+IMAP ayrıştırıcı TLS'ten ayrı kalır; böylece SMTP ileride kriptografi/ağ kodunu çoğaltmadan aynı taşımayı kullanabilir.
 
-### TLS transport
+### TLS taşıması
 
 #### `IMBMBEDTLSTransport`
 
-Reusable verified TLS transport for normal mail traffic.
+Normal posta trafiği için yeniden kullanılabilir, doğrulanmış TLS taşıması.
 
-Responsibilities:
+Sorumlulukları:
 
-- TCP connect
-- Mbed TLS context/RNG/trust-anchor setup
-- TLS 1.2 handshake
+- TCP bağlantısı
+- Mbed TLS bağlam/RNG/güven çapası kurulumu
+- TLS 1.2 el sıkışması
 - ClientHello SNI
-- hostname verification
-- X.509 chain verification
-- encrypted read/write
-- bounded timeouts
-- cancellation by shutting down the active socket
-- clean close
+- host adı doğrulaması
+- X.509 zincir doğrulaması
+- şifreli okuma/yazma
+- sınırlı zaman aşımları
+- aktif soketi kapatarak iptal
+- temiz kapanış
 
-The transport does not know about IMAP commands, usernames, passwords, mailboxes, MIME, or SMTP semantics.
+Taşıma IMAP komutlarını, kullanıcı adlarını, şifreleri, posta kutularını, MIME'ı veya SMTP anlamlarını bilmez.
 
 #### Mbed TLS 3.6.7
 
-- vendored at build time under `Vendor/mbedtls`
-- configured by `Config/IMBMBEDTLSConfig.h`
-- bootstrapped by `scripts/bootstrap_mbedtls.sh`
-- iOS 5 monotonic time supplied by `Classes/IMBMBEDTLSPlatform.c`
-- TLS 1.2 only for the current modern transport
-- approved suites limited to ECDHE-ECDSA + AES-GCM
-- RSA enabled only for X.509 chain-signature verification
-- ClientHello SNI enabled explicitly
+- derleme zamanında `Vendor/mbedtls` altına eklenir
+- `Config/IMBMBEDTLSConfig.h` ile yapılandırılır
+- `scripts/bootstrap_mbedtls.sh` ile kurulur
+- iOS 5 monoton zamanını `Classes/IMBMBEDTLSPlatform.c` sağlar
+- güncel modern taşıma için yalnızca TLS 1.2
+- onaylı şifre takımları ECDHE-ECDSA + AES-GCM ile sınırlı
+- RSA yalnızca X.509 zincir imzası doğrulaması için açık
+- ClientHello SNI açıkça etkin
 
-The modern TLS path has been proven on the physical iPad 1 against `mail.olap.com.tr:993` with full certificate/hostname verification and a Dovecot greeting.
+Modern TLS yolu fiziksel iPad 1'de `mail.olap.com.tr:993`'e karşı tam sertifika/host adı doğrulaması ve Dovecot karşılamasıyla kanıtlandı.
 
-#### Diagnostics
+#### Tanılamalar
 
-- `IMBTLSDiagnostics` remains for observing the legacy iOS 5 SecureTransport cipher set.
-- `IMBModernTLSProbe` remains as a physical-device Mbed TLS diagnostic while transport integration stabilizes.
+- `IMBTLSDiagnostics`, eski iOS 5 SecureTransport şifre setini gözlemlemek için duruyor.
+- `IMBModernTLSProbe`, taşıma entegrasyonu oturana kadar fiziksel cihazda Mbed TLS tanılaması olarak duruyor.
 
-SecureTransport is no longer the intended normal IMAP transport for modern servers.
+SecureTransport artık modern sunucular için hedeflenen normal IMAP taşıması değil.
 
-## Trust model
+## Güven modeli
 
-The application authenticates the server hostname and certificate chain. The current bootstrap includes ISRG Root X1 in `Resources` for the validated test server chain.
+Uygulama sunucu host adını ve sertifika zincirini doğrular. Güncel kurulum, doğrulanan test sunucusu zinciri için `Resources` içinde ISRG Root X1'i içerir.
 
-Trust anchors can be expanded for additional providers, but unsupported chains must be solved by adding the required trusted roots/algorithms rather than bypassing verification.
+Güven çapaları ek sağlayıcılar için genişletilebilir, ancak desteklenmeyen zincirler doğrulamayı atlatarak değil, gereken güvenilir kökleri/algoritmaları ekleyerek çözülmelidir.
 
-## Concurrency and cancellation
+## Eşzamanlılık ve iptal
 
-`IMBIMAPClient` performs a fetch operation on a background thread. Each operation receives a generation token. Refresh/cancel increments the generation and cancels the currently active transport.
+`IMBIMAPClient` getirme işlemini arka plan iş parçacığında yapar. Her işlem bir nesil belirteci alır. Yenile/iptal nesli artırır ve o an aktif olan taşımayı iptal eder.
 
-A stale worker result is discarded on the main thread. The active Mbed TLS socket is shut down on cancellation so a blocked read can unwind quickly.
+Eski bir işçi sonucu ana iş parçacığında atılır. İptalde aktif Mbed TLS soketi kapatılır, böylece bloklanmış bir okuma hızla çözülür.
 
-## Memory and response limits
+## Bellek ve yanıt sınırları
 
-- initial Inbox page: latest 25 messages
-- IMAP command timeout: 20 seconds
-- maximum accumulated IMAP response for this milestone: 512 KB
-- Mbed TLS record buffers remain bounded in project configuration
-- full bodies/attachments are not fetched during Inbox listing
+- ilk Gelen Kutusu sayfası: en son 25 mesaj
+- IMAP komut zaman aşımı: 20 saniye
+- bu kilometre taşı için en fazla biriken IMAP yanıtı: 512 KB
+- Mbed TLS kayıt tamponları proje yapılandırmasında sınırlı kalır
+- Gelen Kutusu listelenirken tam gövdeler/ekler getirilmez
 
-## Suite ownership and hand-off
+## Uygulama ailesi sahipliği ve devir
 
-`iPad1MailBox` owns accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off. It must not become a general file manager.
+`iPad1MailBox` hesaplar, klasörler, mesajlar, yazma/gönderme, MIME yorumlama ve ek devrinden sorumludur. Genel bir dosya yöneticisine dönüşmemelidir.
 
-Planned hand-off targets:
+Planlanan devir hedefleri:
 
 - PDF -> iPad1PDFReader
-- ZIP and general files -> iPad1Files
-- video/audio -> iPad1Player
+- ZIP ve genel dosyalar -> iPad1Files
+- video/ses -> iPad1Player
 
-Planned shared attachment root:
+Planlanan ortak ek kökü:
 
 `/var/mobile/Media/iPad1Files/Mail/Attachments/`
 
-## Build flow
+## Derleme akışı
 
-First-time or Mbed TLS configuration refresh:
+İlk kurulum veya Mbed TLS yapılandırmasını yenileme:
 
 ```bash
 make bootstrap
 ```
 
-Build package:
+Paket derleme:
 
 ```bash
 find . -type f -exec touch {} +
@@ -146,32 +146,32 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-## Milestones
+## Kilometre taşları
 
 ### v0.1
 
-Application shell, split view, account setup, Keychain, compose shell.
+Uygulama iskeleti, bölünmüş görünüm, hesap kurulumu, Keychain, mesaj yazma iskeleti.
 
 ### v0.2
 
-Minimal IMAP parser, Inbox headers, connection diagnostics, SecureTransport capability investigation.
+En küçük IMAP ayrıştırıcı, Gelen Kutusu başlıkları, bağlantı tanılamaları, SecureTransport yetenek araştırması.
 
 ### v0.3
 
-Modern Mbed TLS transport validation on the physical iPad.
+Fiziksel iPad'de modern Mbed TLS taşıma doğrulaması.
 
 ### v0.4
 
-Reusable verified Mbed TLS transport and migration of normal IMAP header loading away from SecureTransport.
+Yeniden kullanılabilir doğrulanmış Mbed TLS taşıması ve normal IMAP başlık yüklemesinin SecureTransport'tan taşınması.
 
-### After transport stability
+### Taşıma kararlı olduktan sonra
 
-- full message body loading
-- RFC 2047 header decoding
-- MIME parsing
-- SMTP send using the reusable transport
-- reply/forward
-- Sent/Drafts/Trash
-- flags
-- attachments and suite routing
-- bounded metadata cache
+- tam mesaj gövdesi yükleme
+- RFC 2047 başlık çözme
+- MIME ayrıştırma
+- yeniden kullanılabilir taşımayla SMTP gönderimi
+- yanıtla/ilet
+- Gönderilen/Taslaklar/Çöp
+- bayraklar
+- ekler ve uygulama ailesi yönlendirmesi
+- sınırlı metadata önbelleği

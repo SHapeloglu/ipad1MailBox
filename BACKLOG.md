@@ -1,93 +1,93 @@
-# Backlog
+# İş Havuzu
 
-_Last updated: 2026-09-17_
+_Son güncelleme: 2026-09-17_
 
-This file contains work that is not part of the current active task. Keep `TASK.md` focused on one immediate goal.
+Bu dosya güncel aktif görevin parçası olmayan işleri içerir. `TASK.md`'yi tek bir acil hedefe odaklı tut.
 
-## Transport and protocol
+## Taşıma ve protokol
 
-- Add reconnect behavior after network changes.
-- Add SMTP transport after IMAP is stable.
-- Distinguish SMTP implicit TLS (typically 465) from STARTTLS submission (typically 587).
-- Replace broad Mbed TLS source wildcarding with an explicit minimal source list after functional milestones stabilize.
+- Ağ değişikliklerinden sonra yeniden bağlanma davranışı ekle.
+- IMAP kararlı olunca SMTP taşıması ekle.
+- SMTP örtük TLS (genelde 465) ile STARTTLS gönderimini (genelde 587) ayır.
+- İşlevsel kilometre taşları oturunca geniş Mbed TLS kaynak joker eklemesini açık ve en küçük kaynak listesiyle değiştir.
 
 ## IMAP
 
-- Folder discovery/listing.
-- Sent/Drafts/Trash mapping.
-- Paged message header loading beyond the initial 25-message page.
-- Full message body loading on demand.
-- Read/unread flags.
-- Star/flag support.
-- Delete/move operations.
-- Refresh without reloading unnecessary data.
-- Basic search after the low-memory mailbox path is stable.
+- Klasör keşfi/listeleme.
+- Gönderilen/Taslaklar/Çöp eşlemesi.
+- İlk 25 mesajlık sayfanın ötesinde sayfalı başlık yükleme.
+- İstek üzerine tam mesaj gövdesi yükleme.
+- Okundu/okunmadı bayrakları.
+- Yıldız/bayrak desteği.
+- Silme/taşıma işlemleri.
+- Gereksiz veriyi yeniden yüklemeden yenileme.
+- Düşük bellekli posta kutusu yolu kararlı olunca temel arama.
 
-## Message parsing
+## Mesaj ayrıştırma
 
-- Parse multipart MIME messages.
-- Prefer plain text when appropriate.
-- Add conservative HTML rendering for iPad 1.
-- Expand charset coverage as real mail samples require it.
-- Parse attachment metadata without loading attachment data eagerly.
-- Reuse `IMBRFC2047Decoder` anywhere decoded display headers are needed outside the Inbox list.
+- Çok parçalı MIME mesajlarını ayrıştır.
+- Uygun olduğunda düz metni tercih et.
+- iPad 1 için temkinli HTML görüntüleme ekle.
+- Gerçek posta örnekleri gerektirdikçe karakter seti kapsamını genişlet.
+- Ek verisini peşin yüklemeden ek metadata'sını ayrıştır.
+- Gelen Kutusu listesi dışında çözülmüş başlık gereken her yerde `IMBRFC2047Decoder`'ı yeniden kullan.
 
-## Compose and SMTP
+## Yazma ve SMTP
 
-- Real SMTP send.
-- Reply.
-- Reply all.
-- Forward.
+- Gerçek SMTP gönderimi.
+- Yanıtla.
+- Tümünü yanıtla.
+- İlet.
 - CC/BCC.
-- Draft persistence.
-- Attachment upload with bounded memory use.
-- Sent-folder copy/save behavior.
+- Taslak kalıcılığı.
+- Sınırlı bellekle ek yükleme.
+- Gönderilen klasörüne kopyalama/kaydetme.
 
-## Attachments and iPad1 suite integration
+## Ekler ve iPad1 uygulama ailesi entegrasyonu
 
-- Save attachments under `/var/mobile/Media/iPad1Files/Mail/Attachments/`.
+- Ekleri `/var/mobile/Media/iPad1Files/Mail/Attachments/` altına kaydet.
 - PDF -> iPad1PDFReader.
-- ZIP/general files -> iPad1Files.
-- Audio/video -> iPad1Player.
-- Avoid duplicating file-manager functionality inside iPad1MailBox.
-- Define safe filenames and collision handling.
-- Add explicit user action before large downloads.
+- ZIP/genel dosyalar -> iPad1Files.
+- Ses/video -> iPad1Player.
+- iPad1MailBox içinde dosya yöneticisi işlevlerini çoğaltmaktan kaçın.
+- Güvenli dosya adları ve çakışma yönetimini tanımla.
+- Büyük indirmelerden önce açık kullanıcı eylemi iste.
 
-## Storage and caching
+## Depolama ve önbellek
 
-- Add a small metadata cache only after transport/message parsing is stable.
-- Define cache limits appropriate for 256 MB RAM and limited device storage.
-- Cache headers and mailbox metadata, not entire mailboxes.
-- Purge old body/attachment cache safely.
-- Never store passwords or authentication secrets in the cache.
+- Küçük bir metadata önbelleğini ancak taşıma/mesaj ayrıştırma kararlı olunca ekle.
+- 256 MB RAM ve sınırlı cihaz depolamasına uygun önbellek sınırları tanımla.
+- Posta kutularının tamamını değil, başlıkları ve posta kutusu metadata'sını önbelleğe al.
+- Eski gövde/ek önbelleğini güvenle temizle.
+- Şifreleri veya kimlik doğrulama sırlarını asla önbellekte saklama.
 
-## TLS and security
+## TLS ve güvenlik
 
-- Keep bundled trust anchors maintainable and documented.
-- Consider bundling multiple required ISRG roots rather than relying on the iOS 5 trust store.
-- Add diagnostic output for negotiated curve and peer certificate chain where useful.
-- Keep certificate and hostname verification mandatory.
-- Review Mbed TLS configuration for unused modules and reduce binary size after the transport works.
-- Review Mbed TLS security updates before each release.
+- Pakete gömülü güven çapalarını bakımı kolay ve belgelenmiş tut.
+- iOS 5 güven deposuna güvenmek yerine gerekli birden fazla ISRG kökünü pakete eklemeyi düşün.
+- Faydalı olduğu yerde anlaşılan eğri ve karşı taraf sertifika zinciri için tanılama çıktısı ekle.
+- Sertifika ve host adı doğrulamasını zorunlu tut.
+- Taşıma çalıştıktan sonra Mbed TLS yapılandırmasındaki kullanılmayan modülleri gözden geçirip ikili boyutunu küçült.
+- Her sürümden önce Mbed TLS güvenlik güncellemelerini incele.
 
-## UI and diagnostics
+## Arayüz ve tanılama
 
-- Separate user-facing connection errors from developer diagnostics.
-- Add a compact account status indicator.
-- Add loading/cancel state that remains responsive on iPad 1.
-- Improve empty mailbox and offline states.
+- Kullanıcıya yönelik bağlantı hatalarını geliştirici tanılamalarından ayır.
+- Küçük bir hesap durum göstergesi ekle.
+- iPad 1'de yanıt vermeye devam eden yükleniyor/iptal durumu ekle.
+- Boş posta kutusu ve çevrimdışı durumlarını iyileştir.
 
-## Provider compatibility
+## Sağlayıcı uyumluluğu
 
-- Test generic Dovecot/cPanel style IMAP/SMTP first.
-- Evaluate Gmail compatibility after generic IMAP/SMTP is stable.
-- Evaluate Outlook/Microsoft compatibility after generic IMAP/SMTP is stable.
-- Investigate OAuth2 only where feasible on iOS 5.1.1; do not block basic standards-based mail support on OAuth work.
+- Önce genel Dovecot/cPanel tarzı IMAP/SMTP'yi test et.
+- Genel IMAP/SMTP kararlı olunca Gmail uyumluluğunu değerlendir.
+- Genel IMAP/SMTP kararlı olunca Outlook/Microsoft uyumluluğunu değerlendir.
+- OAuth2'yi yalnızca iOS 5.1.1'de mümkün olduğu yerde araştır; temel standart e-posta desteğini OAuth çalışmasına bağlama.
 
-## Release hygiene
+## Sürüm hijyeni
 
-- Keep `SESSION.md` updated at the end of meaningful development sessions.
-- Keep `TASK.md` to one active problem.
-- Record architecture-changing choices in `DECISIONS.md`.
-- Update `ARCHITECTURE.md` when component boundaries change.
-- Maintain `THIRD_PARTY_NOTICES.md` when dependencies or licenses change.
+- Anlamlı geliştirme oturumlarının sonunda `SESSION.md`'yi güncel tut.
+- `TASK.md`'de tek bir aktif sorun olsun.
+- Mimariyi değiştiren seçimleri `DECISIONS.md`'ye yaz.
+- Bileşen sınırları değişince `ARCHITECTURE.md`'yi güncelle.
+- Bağımlılıklar veya lisanslar değişince `THIRD_PARTY_NOTICES.md`'yi güncelle.

@@ -1,136 +1,136 @@
-# Architecture Decisions
+# Mimari Kararlar
 
-_Last updated: 2026-09-17_
+_Son güncelleme: 2026-09-17_
 
-This is a lightweight decision log. Record choices that would otherwise be easy to revisit without remembering the original constraints.
+Bu hafif bir karar günlüğüdür. Orijinal kısıtlar hatırlanmadan kolayca yeniden tartışılabilecek seçimleri buraya kaydet.
 
-## ADR-001 - Target the original iPad explicitly
+## ADR-001 - Orijinal iPad'i açıkça hedefle
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-The project targets iPad 1, iOS 5.1.1, armv7, 256 MB RAM, non-ARC Objective-C, Theos, and the iPhoneOS 6.1 SDK.
+Proje iPad 1, iOS 5.1.1, armv7, 256 MB RAM, non-ARC Objective-C, Theos ve iPhoneOS 6.1 SDK'yı hedefler.
 
-**Consequences:**
+**Sonuçlar:**
 
-- modern Apple networking APIs cannot be assumed
-- memory use must stay bounded
-- dependencies must compile with the old SDK/toolchain
-- physical-device testing is required
+- güncel Apple ağ API'lerinin var olduğu varsayılamaz
+- bellek kullanımı sınırlı kalmalı
+- bağımlılıklar eski SDK/toolchain ile derlenmeli
+- fiziksel cihaz testi gerekli
 
-## ADR-002 - Store mail passwords in Keychain only
+## ADR-002 - E-posta şifrelerini yalnızca Keychain'de sakla
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-Account metadata may be persisted normally, but passwords must be stored in iOS Keychain.
+Hesap metadata'sı normal şekilde saklanabilir, ancak şifreler iOS Keychain'de saklanmalıdır.
 
-The application is signed with the required application identifier and keychain access group entitlements.
+Uygulama gerekli uygulama kimliği ve keychain erişim grubu yetkileriyle (entitlements) imzalanır.
 
-**Rejected alternatives:** plist, `NSUserDefaults`, SQLite, logs, custom encrypted files.
+**Reddedilen seçenekler:** plist, `NSUserDefaults`, SQLite, günlükler, özel şifreli dosyalar.
 
-## ADR-003 - Do not weaken TLS verification for compatibility
+## ADR-003 - Uyumluluk için TLS doğrulamasını zayıflatma
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-Certificate and hostname verification remain mandatory.
+Sertifika ve host adı doğrulaması zorunlu kalır.
 
-Do not use accept-all verification callbacks, `AllowsAnyRoot`, disabled peer verification, or obsolete TLS versions merely to make an old device connect.
+Eski bir cihazı bağlayabilmek için her şeyi kabul eden doğrulama geri çağrıları, `AllowsAnyRoot`, kapatılmış karşı taraf doğrulaması veya eskimiş TLS sürümleri kullanma.
 
-## ADR-004 - SecureTransport is diagnostic/legacy, not the long-term modern TLS path
+## ADR-004 - SecureTransport tanılama/eski yoldur, uzun vadeli modern TLS yolu değil
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-Physical-device diagnostics showed that iOS 5.1.1 SecureTransport lacks the ECDHE-ECDSA AES-GCM cipher suites currently required by the test mail server. The server also rejects the older ECDHE-ECDSA CBC suites available on the iPad.
+Fiziksel cihaz tanılamaları, iOS 5.1.1 SecureTransport'ta test posta sunucusunun şu an gerektirdiği ECDHE-ECDSA AES-GCM şifre takımlarının olmadığını gösterdi. Sunucu, iPad'de bulunan eski ECDHE-ECDSA CBC takımlarını da reddediyor.
 
-**Decision:** Keep SecureTransport long enough to preserve diagnostics, but move modern server connectivity to a bundled TLS implementation.
+**Karar:** Tanılamaları korumaya yetecek kadar SecureTransport'u tut, ancak modern sunucu bağlantısını pakete gömülü bir TLS uygulamasına taşı.
 
-## ADR-005 - Use Mbed TLS 3.6.7 for the modern TLS transport
+## ADR-005 - Modern TLS taşıması için Mbed TLS 3.6.7 kullan
 
-**Status:** Accepted for current development
+**Durum:** Güncel geliştirme için kabul edildi
 
-Mbed TLS 3.6.7 is compiled into the application and configured for TLS 1.2, ECDHE-ECDSA, AES-GCM, SNI, X.509 verification, and a secure RNG.
+Mbed TLS 3.6.7 uygulamaya derlenir ve TLS 1.2, ECDHE-ECDSA, AES-GCM, SNI, X.509 doğrulaması ve güvenli RNG için yapılandırılır.
 
-## ADR-006 - Validate Mbed TLS independently before replacing IMAP transport
+## ADR-006 - IMAP taşımasını değiştirmeden önce Mbed TLS'i bağımsız doğrula
 
-**Status:** Completed successfully
+**Durum:** Başarıyla tamamlandı
 
-`IMBModernTLSProbe` was used as a deliberate integration gate before replacing normal IMAP transport.
+`IMBModernTLSProbe`, normal IMAP taşımasını değiştirmeden önce bilinçli bir entegrasyon kapısı olarak kullanıldı.
 
-The physical iPad has now proven:
+Fiziksel iPad artık şunları kanıtladı:
 
-- RNG initialization
-- trust-anchor parsing
-- TCP connection
-- TLS 1.2 handshake
+- RNG başlatma
+- güven çapası ayrıştırma
+- TCP bağlantısı
+- TLS 1.2 el sıkışması
 - ClientHello SNI
-- hostname verification
-- certificate-chain verification
-- ECDHE-ECDSA AES-256-GCM negotiation
-- Dovecot IMAP greeting
+- host adı doğrulaması
+- sertifika zinciri doğrulaması
+- ECDHE-ECDSA AES-256-GCM anlaşması
+- Dovecot IMAP karşılaması
 
-The probe remains useful as diagnostics, but it no longer blocks transport integration.
+Yoklama tanılama olarak işe yaramaya devam ediyor, ancak artık taşıma entegrasyonunu engellemiyor.
 
-## ADR-007 - Supply monotonic time with `mach_absolute_time()`
+## ADR-007 - Monoton zamanı `mach_absolute_time()` ile sağla
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-Mbed TLS 3.6.7's default Unix-like millisecond timer path selected `clock_gettime()`, which is unavailable for the iOS 5 target. `MBEDTLS_PLATFORM_MS_TIME_ALT` plus `IMBMBEDTLSPlatform.c` provides `mbedtls_ms_time()` using `mach_absolute_time()`.
+Mbed TLS 3.6.7'nin varsayılan Unix benzeri milisaniye zamanlayıcı yolu, iOS 5 hedefinde bulunmayan `clock_gettime()`'ı seçiyordu. `MBEDTLS_PLATFORM_MS_TIME_ALT` ve `IMBMBEDTLSPlatform.c`, `mach_absolute_time()` kullanarak `mbedtls_ms_time()` sağlar.
 
-## ADR-008 - Keep mail application ownership narrow
+## ADR-008 - E-posta uygulamasının sorumluluğunu dar tut
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-iPad1MailBox owns mail accounts, folders, messages, compose/send, MIME interpretation, and attachment hand-off. It does not become a second file manager or media player.
+iPad1MailBox; e-posta hesapları, klasörler, mesajlar, yazma/gönderme, MIME yorumlama ve ek devrinden sorumludur. İkinci bir dosya yöneticisine veya medya oynatıcıya dönüşmez.
 
-Planned hand-off:
+Planlanan devir:
 
 - PDF -> iPad1PDFReader
-- ZIP/general files -> iPad1Files
-- audio/video -> iPad1Player
+- ZIP/genel dosyalar -> iPad1Files
+- ses/video -> iPad1Player
 
-## ADR-009 - Optimize Mbed TLS only after the required feature set works
+## ADR-009 - Mbed TLS'i ancak gereken özellik seti çalıştıktan sonra optimize et
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-During bring-up, the Makefile may compile a broader set of Mbed TLS library sources than the final application needs. After successful end-to-end TLS/IMAP validation, replace broad wildcard inclusion with an explicit minimal source list and measure binary/RAM impact.
+Devreye alma sırasında Makefile, nihai uygulamanın ihtiyacından daha geniş bir Mbed TLS kaynak kümesini derleyebilir. Uçtan uca TLS/IMAP doğrulaması başarıyla tamamlandıktan sonra geniş joker eklemeyi açık ve en küçük bir kaynak listesiyle değiştir ve ikili/RAM etkisini ölç.
 
-## ADR-010 - Keep ISRG Root X1 and support RSA certificate signatures
+## ADR-010 - ISRG Root X1'i koru ve RSA sertifika imzalarını destekle
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-The first probe failed because the ECC-focused Mbed TLS profile could not parse the RSA signature OID in ISRG Root X1. Rather than change the trust model during bring-up, the project keeps ISRG Root X1 as the trust anchor and enables RSA PKCS#1 v1.5 support for X.509 certificate-signature verification.
+İlk yoklama, ECC odaklı Mbed TLS profili ISRG Root X1'deki RSA imza OID'ini ayrıştıramadığı için başarısız oldu. Devreye alma sırasında güven modelini değiştirmek yerine proje ISRG Root X1'i güven çapası olarak tutar ve X.509 sertifika imzası doğrulaması için RSA PKCS#1 v1.5 desteğini açar.
 
-ISRG Root X1 uses a 4096-bit RSA key, so `MBEDTLS_MPI_MAX_SIZE` is raised to 512 bytes.
+ISRG Root X1 4096 bitlik bir RSA anahtarı kullandığı için `MBEDTLS_MPI_MAX_SIZE` 512 bayta çıkarıldı.
 
-This does **not** enable RSA TLS key exchange. The configured TLS cipher suites remain ECDHE-ECDSA + AES-GCM only.
+Bu, RSA TLS anahtar değişimini **açmaz**. Yapılandırılmış TLS şifre takımları yalnızca ECDHE-ECDSA + AES-GCM olarak kalır.
 
-## ADR-011 - Enable ClientHello SNI explicitly
+## ADR-011 - ClientHello SNI'yi açıkça etkinleştir
 
-**Status:** Accepted and verified
+**Durum:** Kabul edildi ve doğrulandı
 
-The `0.3-alpha3` device trace proved that calling `mbedtls_ssl_set_hostname()` alone was not enough in the project's minimal build. Hostname verification was active, but the ClientHello did not carry the `server_name` extension because `MBEDTLS_SSL_SERVER_NAME_INDICATION` was not enabled.
+`0.3-alpha3` cihaz izi, projenin en küçük derlemesinde yalnızca `mbedtls_ssl_set_hostname()` çağırmanın yetmediğini kanıtladı. Host adı doğrulaması aktifti, ancak `MBEDTLS_SSL_SERVER_NAME_INDICATION` açık olmadığı için ClientHello `server_name` uzantısını taşımıyordu.
 
-The virtual-hosted IMAP server therefore returned its default `da2.mirahosting.com` certificate.
+Bu yüzden sanal host'lu IMAP sunucusu varsayılan `da2.mirahosting.com` sertifikasını döndürdü.
 
-`0.3-alpha4` enabled `MBEDTLS_SSL_SERVER_NAME_INDICATION` while retaining `mbedtls_ssl_set_hostname()`.
+`0.3-alpha4`, `mbedtls_ssl_set_hostname()`'i koruyarak `MBEDTLS_SSL_SERVER_NAME_INDICATION`'ı açtı.
 
-On the physical iPad this resulted in the expected `olap.com.tr` certificate, a SAN containing `mail.olap.com.tr`, zero verification flags, a successful TLS 1.2 handshake, `TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384`, and a valid Dovecot IMAP greeting.
+Fiziksel iPad'de bu; beklenen `olap.com.tr` sertifikası, `mail.olap.com.tr` içeren SAN, sıfır doğrulama bayrağı, başarılı TLS 1.2 el sıkışması, `TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384` ve geçerli bir Dovecot IMAP karşılamasıyla sonuçlandı.
 
-## ADR-012 - Reuse one Mbed TLS transport for IMAP now and SMTP later
+## ADR-012 - Şimdi IMAP, ileride SMTP için tek bir Mbed TLS taşımasını yeniden kullan
 
-**Status:** Accepted
+**Durum:** Kabul edildi
 
-The proven Mbed TLS setup should be extracted from the diagnostic probe into a reusable transport abstraction rather than copied directly into `IMBIMAPClient`.
+Kanıtlanmış Mbed TLS kurulumu, doğrudan `IMBIMAPClient`'a kopyalanmak yerine tanılama yoklamasından yeniden kullanılabilir bir taşıma soyutlamasına çıkarılmalıdır.
 
-The transport should own:
+Taşımanın sorumlulukları:
 
-- TCP connect/close
-- TLS setup and handshake
-- trust-anchor configuration
-- SNI and hostname verification
-- bounded encrypted reads/writes
-- timeout/cancellation handling
-- TLS error reporting
+- TCP bağlan/kapat
+- TLS kurulumu ve el sıkışması
+- güven çapası yapılandırması
+- SNI ve host adı doğrulaması
+- sınırlı şifreli okuma/yazma
+- zaman aşımı/iptal işleme
+- TLS hata raporlama
 
-`IMBIMAPClient` should continue to own IMAP commands and parsing. SMTP can later reuse the same transport without duplicating TLS/security logic.
+IMAP komutları ve ayrıştırma `IMBIMAPClient`'ta kalmalı. SMTP ileride TLS/güvenlik mantığını çoğaltmadan aynı taşımayı kullanabilir.
 
-**Reason:** Keep protocol logic separate from security/socket plumbing, reduce duplication, and make future SMTP integration safer on the constrained iPad 1 target.
+**Neden:** Protokol mantığını güvenlik/soket altyapısından ayrı tutmak, tekrarı azaltmak ve kısıtlı iPad 1 hedefinde gelecekteki SMTP entegrasyonunu daha güvenli yapmak.

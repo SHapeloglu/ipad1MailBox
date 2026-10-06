@@ -1,57 +1,57 @@
 # iPad1MailBox
 
-iPad1MailBox is a lightweight mail client for the original iPad (iOS 5.1.1, armv7, 256 MB RAM).
+iPad1MailBox, orijinal iPad (iOS 5.1.1, armv7, 256 MB RAM) için hafif bir e-posta istemcisidir.
 
-## Current milestone: v0.4-alpha2
+## Güncel kilometre taşı: v0.4-alpha2
 
-- Native Objective-C / UIKit split-view UI
-- Account metadata storage + Keychain-backed password storage
-- Mbed TLS 3.6.7 verified TLS 1.2 transport
-- TLS 1.2 ECDHE/ECDSA + AES-GCM only for the current modern path
-- ClientHello SNI for virtual-hosted mail endpoints
-- hostname + X.509 certificate-chain verification
-- reusable `IMBMBEDTLSTransport` for encrypted connect/read/write/cancel/close behavior
-- normal Inbox IMAP flow moved off SecureTransport onto Mbed TLS
-- latest 25 message headers via `LOGIN -> SELECT INBOX -> FETCH`
-- RFC 2047 Subject/From decoding for Q and Base64 encoded words
-- UTF-8 and legacy IANA charset conversion through CoreFoundation, including Turkish ISO-8859-9 when available
-- SecureTransport and Mbed TLS diagnostics retained separately
-- non-ARC and Theos/iPhoneOS 6.1 SDK compatible
+- Yerel (native) Objective-C / UIKit bölünmüş görünüm (split-view) arayüzü
+- Hesap metadata'sı saklama + Keychain tabanlı şifre saklama
+- Mbed TLS 3.6.7 ile doğrulanmış TLS 1.2 taşıması
+- Güncel modern yol için yalnızca TLS 1.2 ECDHE/ECDSA + AES-GCM
+- Sanal host'lu posta sunucuları için ClientHello SNI
+- host adı + X.509 sertifika zinciri doğrulaması
+- şifreli bağlan/oku/yaz/iptal/kapat davranışı için yeniden kullanılabilir `IMBMBEDTLSTransport`
+- normal Gelen Kutusu IMAP akışı SecureTransport'tan Mbed TLS'e taşındı
+- `LOGIN -> SELECT INBOX -> FETCH` ile en son 25 mesaj başlığı
+- Q ve Base64 kodlanmış sözcükler için RFC 2047 Konu/Gönderen çözme
+- CoreFoundation üzerinden UTF-8 ve eski IANA karakter seti dönüşümü (mevcutsa Türkçe ISO-8859-9 dahil)
+- SecureTransport ve Mbed TLS tanılamaları ayrı ayrı korundu
+- non-ARC ve Theos/iPhoneOS 6.1 SDK uyumlu
 
-`0.4-alpha1` was physically verified on the original iPad: the real Inbox loaded successfully over the reusable Mbed TLS transport, removing the old normal-operation `OSStatus -9844` blocker. `0.4-alpha2` focuses on making real-world encoded Subject and From headers readable.
+`0.4-alpha1` orijinal iPad'de fiziksel olarak doğrulandı: gerçek Gelen Kutusu yeniden kullanılabilir Mbed TLS taşımasıyla başarıyla yüklendi ve eski normal çalışmadaki `OSStatus -9844` engeli ortadan kalktı. `0.4-alpha2`, gerçek dünyadaki kodlanmış Konu ve Gönderen başlıklarını okunabilir yapmaya odaklanıyor.
 
-## Project documents
+## Proje dokümanları
 
-- `ARCHITECTURE.md` - component boundaries, constraints, trust model, and transport design
-- `DECISIONS.md` - architecture decision log
-- `TASK.md` - the single active engineering task and definition of done
-- `SESSION.md` - latest development handoff and test commands
-- `BACKLOG.md` - deferred features and future work
+- `ARCHITECTURE.md` - bileşen sınırları, kısıtlar, güven modeli ve taşıma tasarımı
+- `DECISIONS.md` - mimari karar günlüğü
+- `TASK.md` - tek aktif mühendislik görevi ve "bitti" tanımı
+- `SESSION.md` - son geliştirme devri ve test komutları
+- `BACKLOG.md` - ertelenen özellikler ve gelecek işler
 
-When resuming development, read `TASK.md` and `SESSION.md` first.
+Geliştirmeye devam ederken önce `TASK.md` ve `SESSION.md`'yi oku.
 
-## Build target
+## Derleme hedefi
 
-- Device: iPad 1
-- OS: iOS 5.1.1
-- Architecture: armv7
+- Cihaz: iPad 1
+- İşletim sistemi: iOS 5.1.1
+- Mimari: armv7
 - Toolchain: Theos + clang
 - SDK: iPhoneOS 6.1
-- Memory management: non-ARC
+- Bellek yönetimi: non-ARC
 
-## Mbed TLS bootstrap
+## Mbed TLS ilk kurulumu
 
-Mbed TLS sources and the current trust anchor are bootstrapped locally:
+Mbed TLS kaynakları ve güncel güven çapası (trust anchor) yerel olarak kurulur:
 
 ```bash
 make bootstrap
 ```
 
-This pins Mbed TLS to `mbedtls-3.6.7`, installs the project configuration, and downloads ISRG Root X1.
+Bu, Mbed TLS'i `mbedtls-3.6.7`'ye sabitler, proje yapılandırmasını kurar ve ISRG Root X1'i indirir.
 
-## Build
+## Derleme
 
-No Mbed TLS config changed between `0.4-alpha1` and `0.4-alpha2`, so an already-working local vendor tree does not require another bootstrap.
+`0.4-alpha1` ile `0.4-alpha2` arasında Mbed TLS yapılandırması değişmedi; bu yüzden zaten çalışan yerel vendor ağacı yeniden bootstrap gerektirmez.
 
 ```bash
 find . -type f -exec touch {} +
@@ -59,17 +59,17 @@ make clean
 make package FINALPACKAGE=1
 ```
 
-Expected package:
+Beklenen paket:
 
 ```text
 packages/com.shapeloglu.ipad1mailbox_0.4-alpha2_iphoneos-arm.deb
 ```
 
-## Normal Inbox transport
+## Normal Gelen Kutusu taşıması
 
-`IMBIMAPClient` performs its protocol work on a background thread and delegates encrypted network I/O to `IMBMBEDTLSTransport`.
+`IMBIMAPClient` protokol işini arka plan iş parçacığında yapar ve şifreli ağ G/Ç'sini `IMBMBEDTLSTransport`'a devreder.
 
-Current flow:
+Güncel akış:
 
 ```text
 verified TLS connect
@@ -81,16 +81,16 @@ verified TLS connect
 -> LOGOUT
 ```
 
-Current safety bounds:
+Güncel güvenlik sınırları:
 
-- 20-second command deadline
-- 512 KB maximum accumulated IMAP response
-- generation-token cancellation so stale refresh results are ignored
-- active socket shutdown on cancel
+- 20 saniyelik komut süresi sınırı
+- en fazla 512 KB biriken IMAP yanıtı
+- eski yenileme sonuçlarının yok sayılması için nesil (generation) belirteciyle iptal
+- iptalde aktif soketin kapatılması
 
-## RFC 2047 header decoding
+## RFC 2047 başlık çözme
 
-`IMBRFC2047Decoder` handles common encoded-word forms used by real mail headers:
+`IMBRFC2047Decoder`, gerçek posta başlıklarında kullanılan yaygın kodlanmış sözcük biçimlerini işler:
 
 ```text
 =?UTF-8?Q?Yeni_Oturum_Kayd=C4=B1?=
@@ -98,24 +98,24 @@ Current safety bounds:
 =?iso-8859-9?Q?...?=
 ```
 
-The decoder supports adjacent encoded words and preserves malformed/unsupported content instead of dropping it. It uses a small custom Base64 decoder rather than newer NSData APIs unavailable on iOS 5.1.1.
+Çözücü bitişik kodlanmış sözcükleri destekler ve bozuk/desteklenmeyen içeriği atmak yerine korur. iOS 5.1.1'de bulunmayan yeni NSData API'leri yerine küçük, özel bir Base64 çözücü kullanır.
 
-## TLS diagnostics
+## TLS tanılamaları
 
-The `TLS` button remains available. It shows the legacy iOS 5 SecureTransport cipher set and the independent Mbed TLS probe used during bring-up. Normal Inbox loading no longer depends on SecureTransport.
+`TLS` düğmesi kullanılabilir durumda kalıyor. Eski iOS 5 SecureTransport şifre setini ve devreye alma sırasında kullanılan bağımsız Mbed TLS yoklamasını gösterir. Normal Gelen Kutusu yüklemesi artık SecureTransport'a bağlı değil.
 
-## Planned suite integration
+## Planlanan uygulama ailesi entegrasyonu
 
-Attachments will be handed off rather than managed as a second file manager:
+Ekler ikinci bir dosya yöneticisi gibi yönetilmek yerine devredilecek:
 
 - PDF -> iPad1PDFReader
-- ZIP / general files -> iPad1Files
-- Media -> iPad1Player
+- ZIP / genel dosyalar -> iPad1Files
+- Medya -> iPad1Player
 
-Default future attachment storage root:
+Gelecekteki varsayılan ek saklama kökü:
 
 `/var/mobile/Media/iPad1Files/Mail/Attachments/`
 
-## Security
+## Güvenlik
 
-Passwords must never be written to plist files, `NSUserDefaults`, logs, or SQLite. Account credentials remain in Keychain. The modern TLS path requires certificate-chain verification, hostname verification, SNI for virtual-hosted endpoints, and the configured TLS 1.2 ECDHE-ECDSA AES-GCM suites.
+Şifreler asla plist dosyalarına, `NSUserDefaults`'a, günlüklere veya SQLite'a yazılmamalıdır. Hesap kimlik bilgileri Keychain'de kalır. Modern TLS yolu sertifika zinciri doğrulaması, host adı doğrulaması, sanal host'lu sunucular için SNI ve yapılandırılmış TLS 1.2 ECDHE-ECDSA AES-GCM şifre takımlarını gerektirir.
